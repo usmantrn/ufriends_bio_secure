@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BioSecure — AI-powered Palm Geometry & Face Recognition biometric authentication system." />
+  <title>BioSecure — Palm Geometry AI</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="/js/offline.js" defer></script>
+  <style>
+    .hero-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - var(--nav-height));
+      padding: clamp(32px, 6vw, 64px) clamp(16px, 4vw, 32px);
+      text-align: center;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 36px;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+      gap: 16px;
+      margin: 48px auto 0;
+      max-width: 900px;
+      width: 100%;
+      text-align: left;
+    }
+    .feature-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-lg);
+      padding: clamp(16px, 3vw, 24px);
+      transition: var(--transition);
+      cursor: default;
+    }
+    .feature-card:hover {
+      background: rgba(255,255,255,0.055);
+      border-color: rgba(0,212,255,0.2);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+    }
+    .feature-icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .feature-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 5px;
+    }
+    .feature-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Floating particles */
+    .particle {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      animation: floatUp 8s ease-in-out infinite;
+    }
+    @keyframes floatUp {
+      0%   { opacity: 0; transform: translateY(0) scale(1); }
+      10%  { opacity: 0.5; }
+      90%  { opacity: 0.2; }
+      100% { opacity: 0; transform: translateY(-80vh) scale(0.6); }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-gradient"></div>
+
+  <!-- Floating particles -->
+  <div class="particle" style="width:4px;height:4px;background:var(--accent-blue);left:15%;top:80%;animation-delay:0s;animation-duration:9s;"></div>
+  <div class="particle" style="width:3px;height:3px;background:var(--accent-purple);left:75%;top:85%;animation-delay:2s;animation-duration:11s;"></div>
+  <div class="particle" style="width:5px;height:5px;background:var(--accent-green);left:45%;top:90%;animation-delay:4s;animation-duration:8s;opacity:0.3;"></div>
+  <div class="particle" style="width:2px;height:2px;background:var(--accent-blue);left:30%;top:75%;animation-delay:1s;animation-duration:13s;"></div>
+  <div class="particle" style="width:4px;height:4px;background:#a78bfa;left:85%;top:70%;animation-delay:3s;animation-duration:10s;"></div>
+
+  <div class="page-wrapper">
+    <!-- ── Navbar ─────────────────────────────────────────────── -->
+    <nav class="navbar">
+      <a href="/" class="nav-brand">
+        <div class="nav-logo">🖐️</div>
+        <div>
+          <div class="nav-title">BIOSECURE</div>
+          <span class="nav-subtitle">Palm Geometry AI</span>
+        </div>
+      </a>
+      <!-- Desktop links -->
+      <div class="nav-links" id="desktop-nav">
+        <a href="/admin" class="nav-link" id="nav-admin-link">Admin</a>
+        <a href="/auth" class="nav-link" style="color:var(--accent-blue); border-color:var(--border-glow);">
+          Biometric Terminal →
+        </a>
+      </div>
+      <!-- Mobile hamburger -->
+      <button class="nav-hamburger" id="hamburger-btn" aria-label="Open menu">☰</button>
+    </nav>
+
+    <!-- Mobile nav drawer -->
+    <div class="nav-mobile-menu" id="mobile-nav">
+      <a href="/auth" class="nav-link" style="color:var(--accent-blue); border-color:var(--border-glow);">🖐️ Biometric Terminal</a>
+      <a href="/admin" class="nav-link">🛡️ Admin Dashboard</a>
+    </div>
+
+    <!-- ── Hero Section ──────────────────────────────────────── -->
+    <div class="hero-section">
+
+      <div class="section-badge">100% Pure Biometrics</div>
+
+      <h1 class="section-title" style="font-size:clamp(28px,7vw,52px); max-width:700px; margin-bottom:18px;">
+        Hand Geometry<br>Recognition
+      </h1>
+
+      <p class="text-secondary" style="font-size:clamp(14px,2.5vw,18px); max-width:560px; line-height:1.8;">
+        Enterprise-grade biometric security powered by AI — verifying your identity through
+        the unique geometry of your hand. Fast, accurate, and completely contactless.
+      </p>
+
+      <div class="hero-cta">
+        <a href="/auth" class="btn btn-primary btn-lg" id="auth-cta-btn">
+          🖐️ Authenticate Identity
+        </a>
+        <a href="/admin" class="btn btn-outline btn-lg" id="admin-cta-btn">
+          🛡️ Admin Dashboard
+        </a>
+        <a href="/enroll.html" class="btn btn-outline btn-lg" style="border-color: var(--accent-green); color: var(--accent-green);">
+          📝 Fast Enrollment
+        </a>
+      </div>
+
+      <!-- Feature Cards -->
+      <div class="feature-grid">
+        <div class="feature-card">
+          <span class="feature-icon">🖐️</span>
+          <div class="feature-title">Palm Geometry</div>
+          <div class="feature-desc">Uses the unique structural geometry of your hand to generate a precise, non-replicable biometric identity.</div>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🤳</span>
+          <div class="feature-title">Face Verification</div>
+          <div class="feature-desc">Multi-modal users undergo an additional facial verification step for a higher level of identity assurance.</div>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🤖</span>
+          <div class="feature-title">On-Device AI</div>
+          <div class="feature-desc">All biometric processing runs locally on your device. Your raw biometric data is never transmitted.</div>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📱</span>
+          <div class="feature-title">Cross-Platform</div>
+          <div class="feature-desc">Compatible with any modern device — desktop, tablet, or smartphone — with a standard camera.</div>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🔒</span>
+          <div class="feature-title">High Security</div>
+          <div class="feature-desc">Engineered with industry-grade matching precision. Unauthorised access attempts are automatically blocked and logged.</div>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📋</span>
+          <div class="feature-title">Full Audit Trail</div>
+          <div class="feature-desc">Every access attempt is timestamped and recorded, giving administrators complete visibility over system activity.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Hamburger toggle
+    const hamburger = document.getElementById('hamburger-btn');
+    const mobileNav = document.getElementById('mobile-nav');
+    hamburger.addEventListener('click', () => {
+      mobileNav.classList.toggle('open');
+      hamburger.textContent = mobileNav.classList.contains('open') ? '✕' : '☰';
+    });
+
+    // Close drawer on link click
+    mobileNav.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => { mobileNav.classList.remove('open'); hamburger.textContent = '☰'; });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+*.log
+.env

@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nimc_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nimc_user
+      POSTGRES_PASSWORD: nimc_secure_pass_2026
+      POSTGRES_DB: nimc_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - nimc_pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer:latest
+    container_name: nimc_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  nimc_pgdata:

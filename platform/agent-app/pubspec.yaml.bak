@@ -1,0 +1,92 @@
+name: nimc_agent_app
+description: NIMC/NIBSS Biometric Enrollment Agent Application
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  provider: ^6.1.1
+  riverpod: ^2.5.1
+  flutter_riverpod: ^2.5.1
+
+  # HTTP & API
+  dio: ^5.7.0
+  web_socket_channel: ^3.0.1
+
+  # Secure storage (JWT tokens, biometric keys)
+  flutter_secure_storage: ^9.2.2
+
+  # Local DB for offline queue
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
+  # Camera
+  camera: ^0.11.0
+
+  # Biometrics (local device auth)
+  local_auth: ^2.3.0
+
+  # GPS / Location
+  geolocator: ^13.0.1
+  geocoding: ^3.0.0
+
+  # Network / IP detection
+  connectivity_plus: ^6.1.0
+
+  # NTP Time sync
+  ntp: ^2.0.0
+
+  # Crypto / Hashing (device fingerprint)
+  crypto: ^3.0.3
+  convert: ^3.1.1
+
+  # Image processing
+  image: ^4.2.0
+
+  # Device Info
+  device_info_plus: ^10.1.2
+  network_info_plus: ^6.0.1
+
+  # UI extras
+  flutter_animate: ^4.5.0
+  lottie: ^3.1.2
+  fl_chart: ^0.69.0
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.4.2
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800

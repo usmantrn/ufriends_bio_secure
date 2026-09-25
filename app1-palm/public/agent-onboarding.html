@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NIMC/NIBSS Agent Licensing</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #34495e; }
+        input[type="text"], input[type="email"], select { width: 100%; padding: 10px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #3498db; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { background-color: #2980b9; }
+        .device-info { background: #ecf0f1; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; margin-top: 5px; color: #7f8c8d; word-break: break-all; }
+        .alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; display: none; }
+        .alert-success { color: #3c763d; background-color: #dff0d8; border-color: #d6e9c6; }
+        .alert-error { color: #a94442; background-color: #f2dede; border-color: #ebccd1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Accredited Agent Onboarding</h2>
+        <p style="color: #7f8c8d; font-size: 14px;">Register your details and lock this device for field enrollments.</p>
+        
+        <div id="statusAlert" class="alert"></div>
+
+        <form id="onboardingForm">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="agentName" required placeholder="John Doe">
+            </div>
+            <div class="form-group">
+                <label>National Identity Number (NIN)</label>
+                <input type="text" id="agentNIN" required placeholder="11-digit NIN">
+            </div>
+            <div class="form-group">
+                <label>Bank Verification Number (BVN)</label>
+                <input type="text" id="agentBVN" required placeholder="11-digit BVN">
+            </div>
+            <div class="form-group">
+                <label>Primary LGA of Operation</label>
+                <select id="agentLGA" required>
+                    <option value="">Select Local Government Area</option>
+                    <option value="LAGOS_MAINLAND">Lagos Mainland</option>
+                    <option value="IKEJA">Ikeja</option>
+                    <option value="ABUJA_MUNICIPAL">Abuja Municipal</option>
+                    <option value="KANO_MUNICIPAL">Kano Municipal</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Device Fingerprint (Auto-Generated)</label>
+                <div class="device-info" id="deviceHash">Generating...</div>
+                <input type="hidden" id="hiddenFingerprint">
+            </div>
+
+            <button type="submit">Submit License Application</button>
+        </form>
+    </div>
+
+    <script>
+        // Generate a hardware/browser fingerprint
+        async function generateDeviceFingerprint() {
+            const components = [
+                navigator.userAgent,
+                navigator.language,
+                screen.colorDepth,
+                screen.width + 'x' + screen.height,
+                new Date().getTimezoneOffset(),
+                navigator.hardwareConcurrency || 'unknown',
+                navigator.deviceMemory || 'unknown',
+                navigator.platform
+            ];
+            
+            const rawString = components.join('|');
+            
+            // Simple SHA-256 hash using Web Crypto API
+            const msgBuffer = new TextEncoder().encode(rawString);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            return 'DEV-' + hashHex.substring(0, 16).toUpperCase();
+        }
+
+        window.onload = async () => {
+            const fingerprint = await generateDeviceFingerprint();
+            document.getElementById('deviceHash').innerText = fingerprint;
+            document.getElementById('hiddenFingerprint').value = fingerprint;
+        };
+
+        document.getElementById('onboardingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            btn.innerText = 'Registering...';
+
+            const payload = {
+                name: document.getElementById('agentName').value,
+                nin: document.getElementById('agentNIN').value,
+                bvn: document.getElementById('agentBVN').value,
+                lga: document.getElementById('agentLGA').value,
+                deviceFingerprint: document.getElementById('hiddenFingerprint').value
+            };
+
+            try {
+                const response = await fetch('/api/agent/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                const alertBox = document.getElementById('statusAlert');
+                alertBox.style.display = 'block';
+                
+                if (result.success) {
+                    alertBox.className = 'alert alert-success';
+                    alertBox.innerText = `Success! Agent ID: ${result.agentId} registered. This device is now authorized for enrollments.`;
+                    e.target.reset();
+                    // Keep the fingerprint the same since it's the same device
+                    document.getElementById('deviceHash').innerText = payload.deviceFingerprint;
+                    document.getElementById('hiddenFingerprint').value = payload.deviceFingerprint;
+                } else {
+                    alertBox.className = 'alert alert-error';
+                    alertBox.innerText = result.error || 'Registration failed';
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network error connecting to server');
+            }
+            
+            btn.disabled = false;
+            btn.innerText = 'Submit License Application';
+        });
+    </script>
+</body>
+</html>

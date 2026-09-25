@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIMC/NIBSS Agent Kiosk Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="kiosk-container">
+        <!-- Header -->
+        <header class="kiosk-header">
+            <div class="header-left">
+                <h1>NIMC/NIBSS Agent Terminal</h1>
+                <div class="status-indicator">
+                    <span class="dot green"></span>
+                    <span>SECURE CONNECTION</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="agent-info">
+                    <span class="label">AGENT ID:</span> <span class="value">AG-9942-X</span>
+                </div>
+                <div class="agent-info">
+                    <span class="label">LOCATION:</span> <span class="value">LAGOS, NG (GPS LOCKED)</span>
+                </div>
+                <div class="agent-info">
+                    <span class="label">DEVICE:</span> <span class="value hardware-id">SCANNING...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="kiosk-main">
+            <!-- Left Panel: Video Feed -->
+            <section class="video-section">
+                <div class="video-header">
+                    <h2>Live Biometric Feed</h2>
+                    <span class="badge">NIR 850nm MODE</span>
+                </div>
+                <div class="video-container">
+                    <img src="{{ url_for('video_feed') }}" alt="Live Video Feed">
+                    <!-- Overlay crosshair -->
+                    <div class="crosshair-h"></div>
+                    <div class="crosshair-v"></div>
+                </div>
+                <div class="video-footer">
+                    <span>CLAHE FILTER: <strong style="color:#0f0">ACTIVE</strong></span>
+                    <span>WDR SENSOR: <strong style="color:#0f0">105dB</strong></span>
+                </div>
+            </section>
+
+            <!-- Right Panel: Controls & Data -->
+            <section class="controls-section">
+                <div class="panel data-panel">
+                    <h3>Citizen Enrollment</h3>
+                    <div class="input-group">
+                        <label>NIN (Optional - for cross-check)</label>
+                        <input type="text" placeholder="Enter NIN...">
+                    </div>
+                    <div class="input-group">
+                        <label>Full Name</label>
+                        <input type="text" placeholder="Citizen full name">
+                    </div>
+                </div>
+
+                <div class="panel action-panel">
+                    <h3>Biometric Capture</h3>
+                    <button class="btn capture-btn" onclick="simulateCapture(this, 'Face')">
+                        [1] CAPTURE NIR FACE
+                    </button>
+                    <button class="btn capture-btn" onclick="simulateCapture(this, 'Left Palm')">
+                        [2] CAPTURE LEFT PALM VEIN
+                    </button>
+                    <button class="btn capture-btn" onclick="simulateCapture(this, 'Right Palm')">
+                        [3] CAPTURE RIGHT PALM VEIN
+                    </button>
+                    
+                    <div class="capture-status" id="captureLog">
+                        > System ready for enrollment...
+                    </div>
+                </div>
+                
+                <button class="btn submit-btn" onclick="alert('Demo: Enrollment submitted to NIBSS/NIMC server!')">
+                    SUBMIT TO CENTRAL SERVER
+                </button>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Fetch hardware status on load
+        fetch('/api/kiosk/status')
+            .then(res => res.json())
+            .then(data => {
+                document.querySelector('.hardware-id').innerText = data.hardware_fingerprint;
+            });
+
+        function simulateCapture(btn, type) {
+            btn.classList.add('scanning');
+            btn.innerText = `SCANNING ${type.toUpperCase()}...`;
+            
+            const log = document.getElementById('captureLog');
+            log.innerHTML += `<br>> Extracting ${type} vectors...`;
+            log.scrollTop = log.scrollHeight;
+
+            setTimeout(() => {
+                btn.classList.remove('scanning');
+                btn.classList.add('success');
+                btn.innerText = `${type.toUpperCase()} CAPTURED ✓`;
+                log.innerHTML += `<br>> <span style="color:#0f0">${type} template encrypted and saved.</span>`;
+                log.scrollTop = log.scrollHeight;
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

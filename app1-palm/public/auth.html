@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="BioSecure Biometric Authentication Terminal — Palm and Face Recognition" />
+  <title>BioSecure — Auth Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:  #00ff88;
+      --blue:   #00d4ff;
+      --purple: #a78bfa;
+      --red:    #ff3366;
+      --bg:     #07070f;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      font-family: 'Inter', sans-serif;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    /* ── HIDDEN UTIL ───────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── START SCREEN ──────────────────────────────────────────── */
+    #start-screen {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(0,212,255,0.08) 0%, var(--bg) 65%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px;
+      z-index: 100;
+    }
+
+    .start-ring {
+      width: 110px; height: 110px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,212,255,0.12), transparent 70%);
+      border: 2px solid rgba(0,212,255,0.35);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 52px;
+      margin-bottom: 32px;
+      animation: ring-pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes ring-pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.25); border-color: rgba(0,212,255,0.35); }
+      50%      { box-shadow: 0 0 0 20px rgba(0,212,255,0); border-color: rgba(0,212,255,0.6); }
+    }
+
+    .start-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(22px, 6vw, 30px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .start-tagline {
+      font-size: 13px; color: rgba(255,255,255,0.45);
+      text-align: center; line-height: 1.7;
+      max-width: 280px; margin-bottom: 48px;
+    }
+
+    .start-features {
+      display: flex; gap: 12px; margin-bottom: 40px;
+    }
+
+    .feature-chip {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px 14px;
+      text-align: center;
+      font-size: 11px; font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.5px;
+    }
+    .feature-chip span { display: block; font-size: 20px; margin-bottom: 4px; }
+
+    .start-btn {
+      width: 100%; max-width: 340px;
+      padding: 17px;
+      background: linear-gradient(135deg, #00d4ff 0%, #0076ff 100%);
+      border: none; border-radius: 18px;
+      font-family: 'Inter', sans-serif;
+      font-size: 16px; font-weight: 700;
+      color: #000; cursor: pointer;
+      letter-spacing: 0.5px;
+      box-shadow: 0 8px 32px rgba(0,212,255,0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .start-btn:active { transform: scale(0.97); box-shadow: 0 4px 16px rgba(0,212,255,0.25); }
+
+    .back-link {
+      margin-top: 20px; font-size: 13px;
+      color: rgba(255,255,255,0.3);
+      text-decoration: none;
+    }
+
+    /* ── SCANNER WRAP ──────────────────────────────────────────── */
+    #scanner-wrap {
+      position: fixed; inset: 0;
+      background: #000;
+      z-index: 50;
+    }
+
+    #scanner-video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    #scanner-canvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    /* Subtle dark vignette around edges */
+    .vignette {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+      pointer-events: none;
+    }
+
+    /* ── TOP BAR ─────────────────────────────────────────────── */
+    .scan-top {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: max(env(safe-area-inset-top), 16px) 20px 20px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%);
+      display: flex; align-items: center; justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .scan-logo {
+      font-family: 'Orbitron', monospace;
+      font-size: 12px; font-weight: 700;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.75);
+    }
+
+    .step-pill {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.18);
+      backdrop-filter: blur(12px);
+      border-radius: 100px;
+      padding: 5px 14px;
+      font-size: 11px; font-weight: 700;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 1.5px;
+    }
+
+    /* ── GUIDE FRAME SVG (centered over camera) ──────────────── */
+    #guide-wrap {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -55%);
+      pointer-events: none;
+    }
+
+    /* Guide rect animation */
+    #palm-rect {
+      animation: dash-rotate 4s linear infinite;
+    }
+    @keyframes dash-rotate {
+      to { stroke-dashoffset: -160; }
+    }
+    #face-ellipse {
+      animation: dash-rotate-face 4s linear infinite;
+    }
+    @keyframes dash-rotate-face {
+      to { stroke-dashoffset: -130; }
+    }
+
+    /* ── PROGRESS RING ────────────────────────────────────────── */
+    #progress-ring-svg {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -55%);
+      pointer-events: none;
+    }
+
+    #progress-rect {
+      transition: stroke-dasharray 0.25s ease;
+    }
+
+    /* ── BOTTOM BAR ───────────────────────────────────────────── */
+    .scan-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 24px 24px max(env(safe-area-inset-bottom), 28px);
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    /* Step dots */
+    .step-dots {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 16px;
+    }
+
+    .step-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .step-dot.active {
+      background: var(--blue);
+      box-shadow: 0 0 8px var(--blue);
+      width: 22px; border-radius: 3.5px;
+    }
+    .step-dot.done {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    /* Challenge badge */
+    #challenge-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(124,58,237,0.88);
+      border: 1px solid rgba(167,139,250,0.4);
+      backdrop-filter: blur(10px);
+      border-radius: 100px;
+      padding: 8px 20px;
+      font-size: 13px; font-weight: 700;
+      color: #fff;
+      margin-bottom: 14px;
+      animation: badge-pop 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    #challenge-badge.passed {
+      background: rgba(0,180,80,0.9);
+      border-color: rgba(0,255,136,0.4);
+    }
+    @keyframes badge-pop {
+      from { transform: scale(0.7); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    /* Main instruction */
+    .scan-instruction {
+      font-size: clamp(18px, 5.5vw, 26px);
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 2px 16px rgba(0,0,0,0.9);
+      margin-bottom: 6px;
+      letter-spacing: -0.3px;
+    }
+
+    .scan-sub {
+      font-size: clamp(12px, 3vw, 14px);
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* ── RESULT SCREEN ────────────────────────────────────────── */
+    #result-screen {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(0,255,136,0.06) 0%, var(--bg) 60%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px max(env(safe-area-inset-bottom), 32px);
+      z-index: 200;
+      overflow-y: auto;
+    }
+    #result-screen.denied {
+      background: radial-gradient(ellipse at 50% 0%, rgba(255,51,102,0.07) 0%, var(--bg) 60%);
+    }
+
+    .result-icon-big {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: pop-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    }
+    @keyframes pop-in {
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+
+    .result-title {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(20px, 6vw, 30px);
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .result-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,0.45);
+      text-align: center;
+      max-width: 280px;
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    /* Score row */
+    .score-row {
+      display: flex; gap: 12px;
+      width: 100%; max-width: 320px;
+      margin-bottom: 20px;
+    }
+
+    .score-pill {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 16px;
+      padding: 16px 12px;
+      text-align: center;
+    }
+
+    .score-pill-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .score-pill-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 17px; font-weight: 700;
+    }
+    .score-pill-value.pass { color: var(--green); }
+    .score-pill-value.fail { color: var(--red); }
+
+    /* User card */
+    .result-user-card {
+      width: 100%; max-width: 320px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 24px;
+    }
+
+    .user-card-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .user-card-name {
+      font-size: 20px; font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .user-card-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+
+    .role-badge {
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.25);
+      color: var(--blue);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .mode-badge {
+      background: rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.25);
+      color: var(--purple);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 11px; font-weight: 600;
+    }
+
+    .user-card-dept {
+      font-size: 12px; color: rgba(255,255,255,0.35);
+    }
+
+    /* Result buttons */
+    .result-btns {
+      display: flex; flex-direction: column; gap: 10px;
+      width: 100%; max-width: 320px;
+    }
+
+    .btn-primary-result {
+      padding: 16px;
+      background: linear-gradient(135deg, #00d4ff 0%, #0076ff 100%);
+      border: none; border-radius: 16px;
+      font-size: 15px; font-weight: 700;
+      color: #000; cursor: pointer;
+      box-shadow: 0 6px 24px rgba(0,212,255,0.3);
+      transition: transform 0.15s ease;
+    }
+    .btn-primary-result:active { transform: scale(0.97); }
+
+    .btn-outline-result {
+      padding: 14px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      font-size: 14px; color: rgba(255,255,255,0.55);
+      cursor: pointer;
+      text-align: center; text-decoration: none;
+      display: block;
+      transition: border-color 0.15s ease, color 0.15s ease;
+    }
+    .btn-outline-result:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.8); }
+
+    /* ── Liveness indicator — big overlay banner on camera ── */
+    #liveness-status {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(0, 0, 0, 0.82);
+      border: 2px solid #00d4ff;
+      border-radius: 50px;
+      padding: 12px 28px;
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      text-align: center;
+      white-space: nowrap;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 12px rgba(0,212,255,0.8);
+      pointer-events: none;
+      animation: pulse-text 1s ease-in-out infinite alternate;
+      display: none; /* hidden until liveness phase starts */
+    }
+    #liveness-status:not(:empty) { display: block; }
+    @keyframes pulse-text {
+      from { opacity: 0.85; box-shadow: 0 0 10px rgba(0,212,255,0.4); }
+      to   { opacity: 1.0;  box-shadow: 0 0 22px rgba(0,212,255,0.9); }
+    }
+    /* ── Offline banner safe spacing ── */
+    .scan-label { margin-top: 4px; }
+  </style>
+  <script src="/js/offline.js" defer></script>
+</head>
+<body>
+
+  <!-- ── START SCREEN ────────────────────────────────────────────── -->
+  <div id="start-screen">
+    <div class="start-ring">🖐️</div>
+
+    <div class="start-title">BIOSECURE</div>
+    <p class="start-tagline">
+      Verify your identity using palm geometry and facial recognition.<br>
+      All AI processing stays on your device.
+    </p>
+
+    <div class="start-features">
+      <div class="feature-chip"><span>🤖</span>On-Device AI</div>
+      <div class="feature-chip"><span>🔒</span>Multi-Modal</div>
+      <div class="feature-chip"><span>⚡</span>Real-Time</div>
+    </div>
+
+    <button class="start-btn" id="btn-start">
+      🔓 &nbsp;Begin Authentication
+    </button>
+    <a href="/" class="back-link">← Back to Home</a>
+  </div>
+
+  <!-- ── SCANNER WRAP ────────────────────────────────────────────── -->
+  <div id="scanner-wrap" class="hidden">
+    <video id="scanner-video" autoplay playsinline></video>
+    <canvas id="scanner-canvas"></canvas>
+    <div class="vignette"></div>
+
+    <!-- Liveness status overlay — shown during liveness check phase -->
+    <div id="liveness-status"></div>
+
+    <!-- Top bar -->
+    <div class="scan-top">
+      <div class="scan-logo">BIOSECURE</div>
+      <div class="step-pill" id="step-pill">STEP 1 OF 2</div>
+    </div>
+
+    <!-- SVG guide frames -->
+    <div id="guide-wrap">
+      <!-- Palm guide -->
+      <svg id="palm-guide" width="260" height="300" viewBox="0 0 260 300" fill="none">
+        <rect id="palm-rect" x="8" y="8" width="244" height="284" rx="22"
+              stroke="rgba(0,212,255,0.65)" stroke-width="2"
+              stroke-dasharray="40 20" fill="none" stroke-dashoffset="0"/>
+        <!-- Corners -->
+        <path d="M8,55 L8,22 Q8,8 22,8 L55,8"   stroke="#00d4ff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path d="M205,8 L238,8 Q252,8 252,22 L252,55"  stroke="#00d4ff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path d="M8,245 L8,278 Q8,292 22,292 L55,292"  stroke="#00d4ff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path d="M205,292 L238,292 Q252,292 252,278 L252,245" stroke="#00d4ff" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <!-- Scanning line -->
+        <line x1="20" x2="240" stroke="rgba(0,212,255,0.45)" stroke-width="1.5">
+          <animate attributeName="y1" values="20;280;20" dur="2.2s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="20;280;20" dur="2.2s" repeatCount="indefinite"/>
+        </line>
+      </svg>
+
+      <!-- Face guide -->
+      <svg id="face-guide" class="hidden" width="220" height="290" viewBox="0 0 220 290" fill="none">
+        <ellipse id="face-ellipse" cx="110" cy="145" rx="102" ry="133"
+                 stroke="rgba(167,139,250,0.75)" stroke-width="2"
+                 stroke-dasharray="38 16" fill="none" stroke-dashoffset="0"/>
+        <!-- Corners of oval -->
+        <path d="M40,20 Q110,5 180,20"   stroke="rgba(167,139,250,0.9)" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M40,270 Q110,285 180,270" stroke="rgba(167,139,250,0.9)" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <!-- Scanning line -->
+        <line x1="20" x2="200" stroke="rgba(167,139,250,0.4)" stroke-width="1.5">
+          <animate attributeName="y1" values="15;275;15" dur="2.5s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="15;275;15" dur="2.5s" repeatCount="indefinite"/>
+        </line>
+      </svg>
+    </div>
+
+    <!-- Progress ring (fills as frames are captured) -->
+    <svg id="progress-ring-svg" width="278" height="318" viewBox="0 0 278 318" fill="none">
+      <rect id="progress-rect" x="4" y="4" width="270" height="310" rx="24"
+            stroke="var(--green)" stroke-width="3.5" fill="none"
+            stroke-dasharray="0 1210" stroke-linecap="round"
+            style="transition: stroke-dasharray 0.25s ease; display:none;"/>
+    </svg>
+
+    <!-- Bottom bar -->
+    <div class="scan-bottom">
+      <div class="step-dots">
+        <div class="step-dot active" id="dot-1"></div>
+        <div class="step-dot" id="dot-2"></div>
+      </div>
+
+      <div id="challenge-badge" class="hidden">
+        <span id="challenge-icon">👁️</span>
+        <span id="challenge-text">BLINK YOUR EYES</span>
+      </div>
+
+      <div class="scan-instruction" id="scan-instruction">Hold your palm in the frame</div>
+      <div class="scan-sub" id="scan-sub">Spread your fingers and keep steady</div>
+    </div>
+  </div>
+
+  <!-- ── RESULT SCREEN ──────────────────────────────────────────── -->
+  <div id="result-screen" class="hidden">
+    <div class="result-icon-big" id="result-icon">✅</div>
+    <div class="result-title" id="result-title">ACCESS GRANTED</div>
+    <p class="result-desc" id="result-desc"></p>
+
+    <div class="score-row" id="score-row">
+      <div class="score-pill">
+        <div class="score-pill-label">🖐️ Palm</div>
+        <div class="score-pill-value pass" id="palm-score">—</div>
+      </div>
+      <div class="score-pill" id="face-score-pill">
+        <div class="score-pill-label">🤳 Face</div>
+        <div class="score-pill-value pass" id="face-score">—</div>
+      </div>
+    </div>
+
+    <div class="result-user-card hidden" id="result-user-card">
+      <div class="user-card-label">Identified User</div>
+      <div class="user-card-name" id="res-name"></div>
+      <div class="user-card-badges">
+        <span id="res-role" class="role-badge"></span>
+        <span id="res-mode" class="mode-badge"></span>
+      </div>
+      <div class="user-card-dept" id="res-dept"></div>
+    </div>
+
+    <div class="result-btns">
+      <button id="btn-admin-dash" onclick="window.location.href='/admin'" class="btn-primary-result hidden">
+        🛡️ &nbsp;Go to Admin Dashboard
+      </button>
+      <button onclick="window.location.reload()" class="btn-outline-result">🔄 New Scan</button>
+      <a href="/" class="btn-outline-result">← Back to Home</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { PalmBiometricSystem, LivenessDetector } from '/js/palm-biometrics.js?v=3';
+    import { FaceBiometricSystem } from '/js/face-biometrics.js?v=3';
+
+    const video  = document.getElementById('scanner-video');
+    const canvas = document.getElementById('scanner-canvas');
+
+    let palmSystem       = null;
+    let faceSystem       = null;
+    let palmMatchData    = null;
+    let livenessDetector = null;
+
+    // ── UI helpers ────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+
+    function setInstruction(main, sub = '') {
+      $('scan-instruction').textContent = main;
+      $('scan-sub').textContent = sub;
+    }
+
+    function vibrate(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(_) {}
+    }
+
+    function showGuide(type) {
+      $('palm-guide').classList.toggle('hidden', type !== 'palm');
+      $('face-guide').classList.toggle('hidden', type !== 'face');
+      resetProgress();
+    }
+
+    function resetProgress() {
+      const rect = $('progress-rect');
+      rect.style.display = 'none';
+      rect.setAttribute('stroke-dasharray', '0 1210');
+    }
+
+    function setProgress(frames, total) {
+      const rect = $('progress-rect');
+      rect.style.display = 'block';
+      const filled = Math.round((frames / total) * 1210);
+      rect.setAttribute('stroke-dasharray', `${filled} ${1210 - filled}`);
+      rect.setAttribute('stroke', frames >= total ? '#00ff88' : '#00d4ff');
+    }
+
+    function showChallenge(text, icon, passed = false) {
+      const badge = $('challenge-badge');
+      badge.classList.remove('hidden', 'passed');
+      if (passed) badge.classList.add('passed');
+      $('challenge-icon').textContent = icon;
+      $('challenge-text').textContent = text;
+    }
+
+    function hideChallenge() {
+      $('challenge-badge').classList.add('hidden');
+    }
+
+    function syncCanvas() {
+      canvas.width  = video.videoWidth  || window.innerWidth;
+      canvas.height = video.videoHeight || window.innerHeight;
+    }
+
+    // ── START ─────────────────────────────────────────────────────
+    $('btn-start').onclick = async () => {
+      $('start-screen').classList.add('hidden');
+      $('scanner-wrap').classList.remove('hidden');
+      showGuide('palm');
+      setInstruction('Loading AI…', 'Just a moment');
+
+      palmSystem = new PalmBiometricSystem(video, canvas);
+      livenessDetector = new LivenessDetector(video, canvas, $('liveness-status'));
+      await palmSystem.startCamera(false); // back camera for palm
+      await livenessDetector.palmSys.startCamera(false);
+      syncCanvas();
+
+      const loaded = await livenessDetector.initialize();
+      if (!loaded) {
+        setInstruction('⚠️ AI Load Error', 'Please refresh and try again');
+        return;
+      }
+
+      // ── Randomly pick a hand for authentication challenge ──
+      const challengedHand = Math.random() > 0.5 ? 'RIGHT' : 'LEFT';
+      
+      // ── Layer 1 + 2: Liveness check before biometric scan ────────────────
+      setInstruction(`🔍 Liveness Check (${challengedHand} Palm)`, `Hold your open ${challengedHand.toLowerCase()} palm still…`);
+      const liveness = await livenessDetector.run();
+      if (!liveness.passed) {
+        setInstruction('❌ Liveness Failed', liveness.reason || 'Please try again with a real hand.');
+        setTimeout(() => $('btn-start').click(), 3000); // auto-retry after 3s
+        return;
+      }
+
+      setInstruction(`Hold your ${challengedHand} palm in the frame`, 'Spread your fingers, keep steady');
+
+      // ── Reuse the same initialized handLandmarker for the real scan ───────
+      palmSystem.handLandmarker = livenessDetector.palmSys.handLandmarker;
+
+      // ── Auto-scan starts immediately ──────────────────────────
+      palmSystem.startScanning(async (palmVector) => {
+        vibrate([40, 20, 80]);
+        setInstruction(`✅ ${challengedHand} Palm captured!`, 'Verifying identity…');
+        resetProgress();
+        palmSystem.stopCamera();
+
+        try {
+          const res  = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ palm_vector: palmVector, hand_side: challengedHand })
+          });
+          const data = await res.json();
+
+          // Handle offline response from service worker
+          if (data.offline && window.BioOffline) {
+            window.BioOffline.handleApiError(data);
+            showResult(false, null, {}, 'You are offline. Data will sync when connected.');
+            return;
+          }
+
+          if (!res.ok) {
+            showResult(false, null, { palm_distance: data.palm_distance }, data.error);
+            return;
+          }
+          if (data.requires_face) {
+            palmMatchData = data.palm_match;
+            palmMatchData.palm_vector = palmVector;
+            palmMatchData.hand_side = challengedHand;
+            await startFaceStep();
+            return;
+          }
+          showResult(true, data.user, { palm_distance: data.palm_distance }, null, data.modality);
+        } catch (err) {
+          showResult(false, null, {}, 'Server connection error.');
+        }
+
+      }, (frames, total) => {
+        setProgress(frames, total);
+        setInstruction(`Capturing… ${frames} of ${total}`, 'Hold still');
+      });
+    };
+
+    // ── FACE STEP ─────────────────────────────────────────────────
+    async function startFaceStep() {
+      // Update dots
+      $('dot-1').classList.remove('active');
+      $('dot-1').classList.add('done');
+      $('dot-2').classList.add('active');
+      $('step-pill').textContent = 'STEP 2 OF 2';
+
+      showGuide('face');
+      // Change guide colours to purple for face step
+      $('progress-rect').setAttribute('stroke', '#a78bfa');
+
+      setInstruction(`Welcome, ${palmMatchData.full_name}!`, 'Now switching to face scan…');
+
+      faceSystem = new FaceBiometricSystem(video, canvas);
+      await faceSystem.startCamera(true); // front camera
+      syncCanvas();
+
+      const loaded = await faceSystem.initialize((status) => {
+        if (status.toLowerCase().includes('load') || status.toLowerCase().includes('init')) {
+          setInstruction('Loading Face AI…', 'Almost ready');
+        }
+      });
+
+      if (!loaded) {
+        setInstruction('⚠️ Face AI Error', 'Please refresh and try again');
+        return;
+      }
+
+      setInstruction('Look at the camera', 'Position your face in the oval');
+
+      try {
+        const faceDescriptor = await faceSystem.captureDescriptor(
+          (msg) => {
+            const m = msg.toLowerCase();
+            if (m.includes('blink')) {
+              showChallenge('BLINK YOUR EYES', '👁️');
+              setInstruction('Liveness Check', 'Blink naturally once');
+            } else if (m.includes('mouth') || m.includes('open')) {
+              showChallenge('OPEN YOUR MOUTH', '😮');
+              setInstruction('Liveness Check', 'Open your mouth wide');
+            } else if (m.includes('passed') || m.includes('capturing')) {
+              showChallenge('CHALLENGE PASSED!', '✅', true);
+              setInstruction('Capturing face…', 'Hold still');
+              setTimeout(hideChallenge, 1200);
+            } else if (m.includes('no face')) {
+              hideChallenge();
+              setInstruction('No face detected', 'Look directly at the camera');
+            }
+          },
+          (done, total) => {
+            setProgress(done, total);
+          }
+        );
+
+        faceSystem.stopCamera();
+        vibrate([40, 20, 40, 20, 80]);
+        setInstruction('✅ Face captured!', 'Verifying…');
+        resetProgress();
+
+        const res  = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            palm_vector:     palmMatchData.palm_vector,
+            hand_side:       palmMatchData.hand_side,
+            face_descriptor: faceDescriptor
+          })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          showResult(true, data.user, { palm_distance: data.palm_distance, face_distance: data.face_distance }, null, data.modality);
+        } else {
+          showResult(false, null, { palm_distance: palmMatchData.palm_distance, face_distance: data.face_distance }, data.error);
+        }
+
+      } catch (err) {
+        setInstruction('⚠️ ' + err.message, 'Please try again');
+      }
+    }
+
+    // ── SHOW RESULT ───────────────────────────────────────────────
+    function showResult(success, user, scores, errorMsg, modality) {
+      $('scanner-wrap').classList.add('hidden');
+      const screen = $('result-screen');
+      screen.classList.remove('hidden', 'denied');
+      if (!success) screen.classList.add('denied');
+
+      $('result-icon').textContent   = success ? '✅' : '❌';
+      const titleEl = $('result-title');
+      titleEl.textContent  = success ? 'ACCESS GRANTED' : 'ACCESS DENIED';
+      titleEl.style.color  = success ? 'var(--green)' : 'var(--red)';
+      $('result-desc').textContent = success
+        ? `Identity confirmed. Welcome back, ${user.full_name}!`
+        : (errorMsg || 'Biometric verification failed.');
+
+      // Palm score
+      const palmVal = $('palm-score');
+      palmVal.textContent = scores.palm_distance != null ? scores.palm_distance.toFixed(4) : '—';
+      palmVal.className   = 'score-pill-value ' + (success ? 'pass' : 'fail');
+
+      // Face score
+      const facePill = $('face-score-pill');
+      const faceVal  = $('face-score');
+      if (scores.face_distance != null) {
+        facePill.style.display = '';
+        faceVal.textContent    = scores.face_distance.toFixed(4);
+        faceVal.className      = 'score-pill-value ' + (scores.face_distance < 0.5 ? 'pass' : 'fail');
+      } else {
+        facePill.style.display = (modality === 'palm') ? 'none' : '';
+      }
+
+      // User card
+      if (success && user) {
+        const card = $('result-user-card');
+        card.classList.remove('hidden');
+        $('res-name').textContent = user.full_name;
+
+        const roleEl = $('res-role');
+        roleEl.textContent = user.role;
+
+        const modeEl = $('res-mode');
+        modeEl.textContent = modality === 'multimodal' ? '🖐️🤳 Multi-Modal' : '🖐️ Palm Only';
+
+        $('res-dept').textContent = user.department ? `Dept: ${user.department}` : '';
+
+      if (user.role === 'Master_Admin') {
+          // Show button as fallback
+          $('btn-admin-dash').classList.remove('hidden');
+          // Auto-redirect to admin dashboard after 2 seconds
+          $('result-desc').textContent = `Identity confirmed. Welcome back, ${user.full_name}! Redirecting to dashboard…`;
+          setTimeout(() => { window.location.replace('/admin'); }, 2000);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

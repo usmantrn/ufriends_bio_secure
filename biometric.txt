@@ -1,0 +1,19 @@
+. Project Overview This project fulfills the requirement to design and implement a secure biometric authentication system. To ensure cross-device compatibility and eliminate the need for specialized hardware (like external fingerprint scanners), the system utilizes the device's built-in camera and advanced Computer Vision algorithms to perform touchless biometric authentication.
+
+The system is divided into two security tiers: a single-modal system for standard users, and a dual-modal (multi-modal) system for high-security roles such as the Master Admin.
+
+2. Phase 1: Single-Modal Authentication (Standard Users) For standard enrollment, the system captures Palm Geometry.
+
+Enrollment: When a user enrolls, they input their details (Name, Role, Department) and pre'BIOMETRIC ASSIGNMENT'sent their open palm to the camera. The system maps a 21-point 3D skeletal framework of their hand and extracts a scale-invariant geometric vector. This mathematical signature is saved to the database.
+Authentication: When the user returns, they scan their palm. The system calculates the Euclidean distance between the live scan and the database records. If the distance is within the strict threshold limit, access is granted and their specific role and details are displayed. Unregistered users are blocked with an "Access Denied - Restricted Area" prompt.
+3. Phase 2: Dual-Modal Authentication (Master Admin / High Security) For maximum security, the Master Admin role requires Dual-Modal authentication, combining both Palm Geometry and Facial Recognition.
+
+Flow: The system first verifies the user's palm. Only if the palm mathematically matches the database will the system initialize the facial recognition module.
+Facial Geometry: The AI extracts a 128-dimensional facial descriptor based on permanent bone structure (pupil distance, jaw width, etc.). Both the palm and face must pass strict independent thresholds to grant access.
+4. Advanced Security Features Implemented To ensure the system is robust against hacking and spoofing, several advanced security protocols were engineered into the architecture:
+
+Active Liveness Detection (Anti-Spoofing): To prevent an attacker from bypassing the facial scanner using a photograph, a video recording, or even an identical twin, the system utilizes "Challenge-Response" liveness detection. The AI randomly requests the user to either "Blink" or "Open their mouth." It calculates the Eye Aspect Ratio (EAR) and Mouth Aspect Ratio (MAR) in real-time, only granting access if the dynamic muscle movement is verified.
+Expression-Invariant AI: The facial recognition neural network is expression-invariant. This means the 128-d biometric signature remains perfectly accurate regardless of whether the user is smiling or blinking during the liveness challenge.
+Duplicate Biometric Prevention: During enrollment, the system scans the entire database to ensure the incoming biometric vector does not already belong to another user, preventing duplicate identities or database poisoning.
+100% Offline Edge-Computing: For maximum privacy and security, the AI models (MediaPipe and face-api.js) are bundled locally. All biometric vector extraction and liveness detection happens on the "Edge" (directly in the browser via WebAssembly) without sending video feeds over the internet.
+5. Conclusion The resulting application is a highly secure, privacy-focused, and hardware-independent biometric system that successfully demonstrates both single and multi-modal authentication principles, fortified with enterprise-grade anti-spoofing measures.

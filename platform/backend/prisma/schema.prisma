@@ -1,0 +1,488 @@
+// NIMC/NIBSS Fraud-Proof Enrollment Platform
+// Complete Prisma Schema — All entities and relationships
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN        // NIMC/NIBSS — full override
+  COMPLIANCE_OFFICER // NIMC/NIBSS — review flags, unlock strike 4+
+  PARTNER_ADMIN      // Frontend Partner Company admin
+  SUPER_AGENT        // Manages pool of field agents, unlocks strike 1-3
+}
+
+enum AgentLicenseStatus {
+  PENDING    // Submitted, awaiting approval
+  ACTIVE     // Fully licensed and operating
+  SUSPENDED  // Temporarily suspended (strike threshold reached)
+  BANNED     // Permanent ban — biometric flagged
+}
+
+enum DevicePlatform {
+  ANDROID
+  LINUX
+  WINDOWS
+}
+
+enum StrikeTrigger {
+  NON_IR_DEVICE             // Camera lacks NIR stream
+  WRONG_CAMERA_VID_PID      // Camera VID/PID not on approved whitelist
+  GPS_OUTSIDE_GEOFENCE      // GPS outside registered operating LGA
+  MOCK_GPS_DETECTED         // isFromMockProvider() = true
+  VPN_DETECTED              // IP vs GPS region mismatch
+  USB_DISCONNECT_MID_SESSION // Camera disconnected during active session
+  HIGH_ENROLLMENT_VELOCITY  // >20 enrollments/hour
+  BIOMETRIC_AUTH_FAIL       // Agent palm vein scan failed
+  IMPOSSIBLE_TRAVEL         // GPS moved implausible distance in short time
+  TIME_MANIPULATION         // Device clock delta > 5 minutes vs server NTP
+  UNUSUAL_HOURS             // Enrollments at 2am–5am pattern
+  CLOCKWORK_INTERVAL        // Perfectly uniform enrollment timing (bot pattern)
+  MANUAL_STRIKE             // Issued manually by compliance officer or admin
+}
+
+enum FlagType {
+  ENROLLMENT_SPEED          // Average enrollment < 2 min over 10-person window
+  TIME_PATTERN              // Unusual hours or clockwork intervals
+  DEMOGRAPHIC_CLUSTER       // 50+ enrollments same GPS in one day
+  DUPLICATE_FACE            // Same citizen face in 2 different agent enrollments
+  CROSS_AGENT_DEVICE        // Same device fingerprint in 2 agent accounts
+  LOCATION_ANOMALY          // Geolocation inconsistency (VPN/GPS spoof)
+  BULK_SIMILAR_FACES        // Enrolled faces unusually similar (manipulation)
+}
+
+enum FlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FlagStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  ESCALATED
+}
+
+enum OrganizationStatus {
+  PENDING   // Awaiting NIMC/NIBSS approval
+  ACTIVE    // Approved and operating
+  SUSPENDED // Suspended by compliance
+}
+
+enum CitizenEnrollmentStatus {
+  PENDING_SYNC   // Captured offline, awaiting server sync
+  SYNCED         // Successfully synced to server
+  FLAGGED        // Flagged for manual review
+  LOCKED         // Hard-locked (duplicate detected) — requires physical office visit
+}
+
+enum AuditAction {
+  // Auth
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DEACTIVATED
+  // Agent lifecycle
+  AGENT_SUBMITTED
+  AGENT_APPROVED
+  AGENT_SUSPENDED
+  AGENT_BANNED
+  AGENT_REINSTATED
+  // Session
+  SESSION_STARTED
+  SESSION_EXPIRED
+  SESSION_TERMINATED
+  // Enrollment
+  CITIZEN_ENROLLED
+  CITIZEN_FLAGGED
+  CITIZEN_LOCKED
+  CITIZEN_SYNCED
+  // Strikes
+  STRIKE_ISSUED
+  STRIKE_UNLOCKED
+  ACCOUNT_UNLOCKED
+  // Flags
+  FLAG_RAISED
+  FLAG_REVIEWED
+  FLAG_ESCALATED
+  FLAG_RESOLVED
+  // Organization
+  ORG_CREATED
+  ORG_APPROVED
+  ORG_SUSPENDED
+  // System
+  SETTINGS_UPDATED
+  MANUAL_REVIEW_ASSIGNED
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SYSTEM SETTINGS (singleton row)
+// ─────────────────────────────────────────────────────────────────
+
+model SystemSettings {
+  id                          String  @id @default(uuid())
+  enrollmentSessionDurationHours Int  @default(4)
+  maxDevicesPerAgent          Int     @default(2)
+  maxEnrollmentsPerHour       Int     @default(20)
+  minEnrollmentSeconds        Int     @default(120)
+  maxClockDriftSeconds        Int     @default(300)
+  flagSpeedWindowSize         Int     @default(10)  // Check avg over last N enrollments
+  flagSpeedMinSeconds         Int     @default(120) // Flag if avg < 2 min
+  flagDemographicClusterCount Int     @default(50)  // Flag if >50 same GPS in one day
+  strikeSessionLockThreshold  Int     @default(3)
+  strikeAccountSuspendThreshold Int   @default(4)
+  strikePermanentBanThreshold Int     @default(5)
+  updatedAt                   DateTime @updatedAt
+  updatedById                 String?
+
+  @@map("nimc_system_settings")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ORGANIZATION — Frontend Partner Companies
+// ─────────────────────────────────────────────────────────────────
+
+model Organization {
+  id               String             @id @default(uuid())
+  name             String
+  rcNumber         String             @unique  // CAC registration number
+  address          String
+  state            String
+  lga              String
+  contactEmail     String
+  contactPhone     String
+  directorName     String
+  directorNin      String
+  status           OrganizationStatus @default(PENDING)
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  operatingGpsLat  Float?
+  operatingGpsLng  Float?
+
+  users            NimcUser[]
+  agents           Agent[]
+
+  @@map("nimc_organizations")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// USER — Web portal users (NIMC staff + Partner company users)
+// ─────────────────────────────────────────────────────────────────
+
+model NimcUser {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  fullName         String
+  phone            String?
+  role             UserRole
+  organizationId   String?   // null for NIMC/NIBSS staff
+  isActive         Boolean   @default(true)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+
+  // Actions taken by this user
+  strikesUnlocked  Strike[]      @relation("UnlockedBy")
+  flagsReviewed    Flag[]        @relation("ReviewedBy")
+  auditLogs        AuditLog[]    @relation("Actor")
+  agentsApproved   Agent[]       @relation("ApprovedBy")
+  agentsBanned     Agent[]       @relation("BannedBy")
+
+  @@map("nimc_users")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AGENT — Field enrollment agents (mobile/desktop app users)
+// ─────────────────────────────────────────────────────────────────
+
+model Agent {
+  id                      String             @id @default(uuid())
+  fullName                String
+  nin                     String             @unique
+  bvn                     String             @unique
+  dateOfBirth             DateTime
+  gender                  String
+  phone                   String
+  email                   String             @unique
+  passwordHash            String
+  address                 String
+  stateOfOrigin           String
+  organizationId          String
+  superAgentUserId        String?            // The super-agent managing this agent
+
+  // Biometric templates (stored as JSON arrays of floats)
+  passportPhotoUrl        String?
+  rgbFaceDescriptor       Float[]
+  irFaceDescriptor        Float[]            // NIR 850nm face template
+  leftPalmVeinTemplate    Float[]            // NIR palm vein — left
+  rightPalmVeinTemplate   Float[]            // NIR palm vein — right
+
+  // License
+  licenseNumber           String             @unique @default(cuid())
+  licenseStatus           AgentLicenseStatus @default(PENDING)
+  approvedById            String?
+  approvedAt              DateTime?
+  bannedById              String?
+  bannedAt                DateTime?
+  banReason               String?
+
+  // Operating geofence
+  operatingState          String
+  operatingLGA            String
+  operatingGpsLat         Float?
+  operatingGpsLng         Float?
+  operatingRadiusKm       Float?            @default(50)
+
+  // Strike tracking
+  strikeCount             Int               @default(0)
+  lastStrikeAt            DateTime?
+
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  organization            Organization      @relation(fields: [organizationId], references: [id])
+  approvedBy              NimcUser?         @relation("ApprovedBy", fields: [approvedById], references: [id])
+  bannedBy                NimcUser?         @relation("BannedBy", fields: [bannedById], references: [id])
+
+  guarantors              AgentGuarantor[]
+  devices                 Device[]
+  sessions                EnrollmentSession[]
+  enrollments             Citizen[]
+  strikes                 Strike[]
+  flags                   Flag[]
+
+  @@map("nimc_agents")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AGENT GUARANTOR — Two guarantors per agent
+// ─────────────────────────────────────────────────────────────────
+
+model AgentGuarantor {
+  id           String  @id @default(uuid())
+  agentId      String
+  fullName     String
+  nin          String
+  phone        String
+  email        String?
+  relationship String
+  address      String
+  state        String
+
+  agent        Agent   @relation(fields: [agentId], references: [id])
+
+  @@map("nimc_agent_guarantors")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DEVICE — Registered kiosk devices per agent (max 2)
+// ─────────────────────────────────────────────────────────────────
+
+model Device {
+  id              String         @id @default(uuid())
+  agentId         String
+  platform        DevicePlatform
+  deviceToken     String         @unique  // SHA-256(MAC + CPU + IMEI + CameraVID/PID)
+  macAddress      String?
+  cpuSerial       String?
+  imei            String?        // Android only
+  cameraVidPid    String         // USB camera Vendor ID + Product ID
+  deviceLabel     String?        // Human-readable name e.g. "Agent's Samsung A54"
+  isActive        Boolean        @default(true)
+  lastSeenAt      DateTime?
+  registeredAt    DateTime       @default(now())
+
+  agent           Agent          @relation(fields: [agentId], references: [id])
+  sessions        EnrollmentSession[]
+
+  @@map("nimc_devices")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ENROLLMENT SESSION — Biometrically-signed agent work session
+// ─────────────────────────────────────────────────────────────────
+
+model EnrollmentSession {
+  id              String    @id @default(uuid())
+  agentId         String
+  deviceId        String
+  sessionToken    String    @unique @default(uuid())
+
+  // Agent self-authentication at session start
+  agentPalmMatchScore  Float?           // Cosine similarity score (>0.85 = pass)
+  agentAuthTimestamp   DateTime?
+
+  // GPS at session start
+  startGpsLat     Float?
+  startGpsLng     Float?
+  startGpsAccuracy Float?
+  cellTowerIdStart String?
+
+  // Device security
+  deviceClockDeltaMs  Int?             // Difference vs server NTP at session start (ms)
+  vpnDetectedAtStart  Boolean          @default(false)
+  mockGpsAtStart      Boolean          @default(false)
+
+  isActive        Boolean   @default(true)
+  startedAt       DateTime  @default(now())
+  expiresAt       DateTime
+  endedAt         DateTime?
+
+  agent           Agent     @relation(fields: [agentId], references: [id])
+  device          Device    @relation(fields: [deviceId], references: [id])
+  enrollments     Citizen[]
+  strikes         Strike[]
+
+  @@map("nimc_enrollment_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CITIZEN — Enrolled individuals (the core database)
+// ─────────────────────────────────────────────────────────────────
+
+model Citizen {
+  id                    String                  @id @default(uuid())
+  nin                   String?                 @unique  // null until assigned/verified
+  fullName              String
+  dateOfBirth           DateTime
+  gender                String
+  phone                 String?
+  address               String
+  stateOfOrigin         String
+  stateOfResidence      String
+  lgaOfResidence        String
+
+  // Biometric templates
+  rgbFaceDescriptor     Float[]
+  irFaceDescriptor      Float[]
+  rightPalmVeinTemplate Float[]                 // NIR vein — enrollment device
+  leftPalmVeinTemplate  Float[]                 // NIR vein — enrollment device
+  rightPalmVisible      Float[]                 // Visible light — phone auth
+  leftPalmVisible       Float[]                 // Visible light — phone auth
+
+  // Enrollment metadata
+  enrolledByAgentId     String
+  enrollmentSessionId   String
+  enrollmentDeviceId    String?
+
+  // GPS + location proof
+  enrollmentGpsLat      Float?
+  enrollmentGpsLng      Float?
+  enrollmentGpsAccuracy Float?
+  enrollmentGpsTimestamp DateTime?
+  enrollmentCellTowerId String?
+
+  // Anti-fraud signals at time of enrollment
+  mockGpsDetected       Boolean                 @default(false)
+  vpnDetected           Boolean                 @default(false)
+  clockDriftMs          Int?
+
+  // Status
+  enrollmentStatus      CitizenEnrollmentStatus @default(SYNCED)
+  flaggedForReview      Boolean                 @default(false)
+  duplicateOfId         String?                 // Points to the original citizen record
+
+  enrolledAt            DateTime                @default(now())
+  syncedAt              DateTime?               // null if still offline-pending
+
+  enrolledByAgent       Agent             @relation(fields: [enrolledByAgentId], references: [id])
+  enrollmentSession     EnrollmentSession @relation(fields: [enrollmentSessionId], references: [id])
+
+  @@map("nimc_citizens")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// STRIKE — Individual strike events per agent
+// ─────────────────────────────────────────────────────────────────
+
+model Strike {
+  id              String        @id @default(uuid())
+  agentId         String
+  sessionId       String?       // Which session triggered this
+  strikeNumber    Int           // This was strike #N for this agent (1, 2, 3...)
+  trigger         StrikeTrigger
+  details         String        // Human-readable description of what happened
+  metadata        Json?         // Raw event data (GPS coords, device info, etc.)
+
+  isResolved      Boolean       @default(false)
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolveNote     String?
+
+  issuedAt        DateTime      @default(now())
+
+  agent           Agent             @relation(fields: [agentId], references: [id])
+  session         EnrollmentSession? @relation(fields: [sessionId], references: [id])
+  resolvedBy      NimcUser?         @relation("UnlockedBy", fields: [resolvedById], references: [id])
+
+  @@map("nimc_strikes")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// FLAG — Behavioral analytics flags (broader patterns)
+// ─────────────────────────────────────────────────────────────────
+
+model Flag {
+  id              String       @id @default(uuid())
+  agentId         String
+  flagType        FlagType
+  severity        FlagSeverity @default(MEDIUM)
+  description     String
+  evidenceData    Json?        // Raw analytics data supporting the flag
+  status          FlagStatus   @default(OPEN)
+  assignedToId    String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  resolveNote     String?
+  raisedAt        DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  agent           Agent        @relation(fields: [agentId], references: [id])
+  reviewedBy      NimcUser?    @relation("ReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("nimc_flags")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AUDIT LOG — Immutable, append-only action log
+// ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  actorId      String?     // User or Agent who performed the action
+  actorRole    String?     // Their role at the time
+  action       AuditAction
+  targetType   String?     // "Agent", "Citizen", "Strike", etc.
+  targetId     String?     // ID of the affected record
+  description  String
+  metadata     Json?       // Any additional context
+  ipAddress    String?
+  userAgent    String?
+  timestamp    DateTime    @default(now())
+
+  actor        NimcUser?   @relation("Actor", fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([timestamp])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@map("nimc_audit_logs")
+}
