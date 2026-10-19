@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:ntp/ntp.dart';
+import 'device_telemetry_service.dart';
 
 /// Anti-fraud location and time verification service
 /// Implements server-side NTP validation and GPS cross-checks
@@ -150,7 +151,6 @@ class AntifraudService {
   // ─── Comprehensive Pre-enrollment Fraud Check ─────────────────────
 
   /// Run all anti-fraud checks before an enrollment is submitted
-  /// Returns a map of findings
   static Future<AntifraudResult> runPreEnrollmentChecks({
     required Position? currentPosition,
     required double? agentBaseLat,
@@ -158,6 +158,10 @@ class AntifraudService {
     required double agentRadiusKm,
     required DateTime? lastEnrollmentTime,
     required int minEnrollmentSeconds,
+    // Optional: previous enrollment location for impossible travel
+    double? prevEnrollmentLat,
+    double? prevEnrollmentLng,
+    DateTime? prevEnrollmentTime,
   }) async {
     final issues = <String>[];
     bool mockGps = false;
@@ -181,17 +185,32 @@ class AntifraudService {
       if (!inZone) issues.add('GPS_OUTSIDE_GEOFENCE');
     }
 
-    // 3. VPN check
+    // 3. Impossible travel check
+    if (currentPosition != null &&
+        prevEnrollmentLat != null &&
+        prevEnrollmentLng != null &&
+        prevEnrollmentTime != null) {
+      final impossible = isImpossibleTravel(
+        lastLat: prevEnrollmentLat, lastLng: prevEnrollmentLng,
+        lastTime: prevEnrollmentTime,
+        currentLat: currentPosition.latitude,
+        currentLng: currentPosition.longitude,
+        currentTime: DateTime.now(),
+      );
+      if (impossible) issues.add('IMPOSSIBLE_TRAVEL');
+    }
+
+    // 4. VPN check
     vpn = await isVpnActive();
     if (vpn) issues.add('VPN_DETECTED');
 
-    // 4. NTP Clock check
+    // 5. NTP Clock check
     clockDriftMs = await getClockDriftMs();
     if (clockDriftMs != null && !isClockWithinTolerance(clockDriftMs)) {
       issues.add('TIME_MANIPULATION');
     }
 
-    // 5. Enrollment velocity check
+    // 6. Enrollment velocity check
     if (lastEnrollmentTime != null) {
       if (isEnrollmentTooFast(
         lastEnrollmentTime: lastEnrollmentTime,
@@ -200,6 +219,10 @@ class AntifraudService {
         issues.add('HIGH_ENROLLMENT_VELOCITY');
       }
     }
+
+    // 7. Gyroscope/accelerometer telemetry — desk-scripting detection
+    final telemetry = await DeviceTelemetryService.collect();
+    if (telemetry.isRobotic) issues.add('ROBOTIC_DEVICE_TELEMETRY');
 
     return AntifraudResult(
       passed: issues.isEmpty,
@@ -210,6 +233,7 @@ class AntifraudService {
       gpsLat: currentPosition?.latitude,
       gpsLng: currentPosition?.longitude,
       gpsAccuracy: currentPosition?.accuracy,
+      telemetry: telemetry,
     );
   }
 }
@@ -223,6 +247,7 @@ class AntifraudResult {
   final double? gpsLat;
   final double? gpsLng;
   final double? gpsAccuracy;
+  final TelemetryResult? telemetry;
 
   AntifraudResult({
     required this.passed,
@@ -233,8 +258,10 @@ class AntifraudResult {
     this.gpsLat,
     this.gpsLng,
     this.gpsAccuracy,
+    this.telemetry,
   });
 
   bool get hasWarnings => issues.isNotEmpty;
   String get summary => passed ? 'All checks passed' : issues.join(', ');
+  double get motionScore => telemetry?.motionScore ?? 1.0;
 }

@@ -234,6 +234,7 @@ model Agent {
   irFaceDescriptor        Float[]            // NIR 850nm face template
   leftPalmVeinTemplate    Float[]            // NIR palm vein — left
   rightPalmVeinTemplate   Float[]            // NIR palm vein — right
+  biometricEnrolled       Boolean            @default(false)  // true after first real biometric capture
 
   // License
   licenseNumber           String             @unique @default(cuid())

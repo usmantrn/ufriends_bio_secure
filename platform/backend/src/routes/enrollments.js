@@ -221,7 +221,7 @@ router.post('/', authenticateAgentToken, async (req, res) => {
   }
 });
 
-// POST /api/enrollments/sync — Bulk sync offline enrollments
+// POST /api/enrollments/sync — Bulk sync offline enrollments with Merkle chain verification
 router.post('/sync', authenticateAgentToken, async (req, res) => {
   try {
     const { enrollments } = req.body;
@@ -229,10 +229,70 @@ router.post('/sync', authenticateAgentToken, async (req, res) => {
       return res.status(400).json({ error: 'No enrollments to sync' });
     }
 
+    // ── Merkle chain verification ──────────────────────────────────────────────
+    // Re-compute the hash chain server-side; any tampered record breaks the chain
+    const crypto = require('crypto');
+    let expectedPrevHash = crypto
+      .createHash('sha256')
+      .update('BIOSECURE_GENESIS_BLOCK_2024')
+      .digest('hex');
+
+    const chainResults = [];
+    const quarantined = [];
+
+    for (const enrollment of enrollments) {
+      const { payloadHash, chainHash, chainIndex } = enrollment._chain || {};
+
+      if (payloadHash && chainHash) {
+        // Sort keys canonically to match client-side hash
+        const payloadForHash = { ...enrollment };
+        delete payloadForHash._chain;
+        delete payloadForHash._security;
+        const canonical = JSON.stringify(
+          Object.fromEntries(Object.entries(payloadForHash).sort())
+        );
+        const recomputedPayloadHash = crypto.createHash('sha256').update(canonical).digest('hex');
+        const recomputedChainHash = crypto
+          .createHash('sha256')
+          .update(recomputedPayloadHash + expectedPrevHash)
+          .digest('hex');
+
+        const chainValid = recomputedChainHash === chainHash;
+        chainResults.push({ localId: enrollment.localId, chainIndex, chainValid });
+
+        if (!chainValid) {
+          quarantined.push(enrollment.localId);
+          logger.error(`🚨 TAMPER DETECTED: Chain broken at index ${chainIndex} — localId: ${enrollment.localId}`);
+          // Raise a critical flag
+          try {
+            await prisma.flag.create({
+              data: {
+                agentId: req.agent.agentId,
+                flagType: 'OFFLINE_TAMPER',
+                severity: 'CRITICAL',
+                description: `Merkle chain verification failed for offline enrollment at index ${chainIndex}. Data may have been tampered with before sync.`,
+                evidenceData: { localId: enrollment.localId, chainIndex, expectedHash: recomputedChainHash, receivedHash: chainHash },
+              },
+            });
+          } catch (_) {}
+          // Don't process quarantined records
+          expectedPrevHash = recomputedChainHash; // advance even on failure
+          continue;
+        }
+
+        expectedPrevHash = chainHash;
+      }
+    }
+
+    // ── Process valid enrollments ──────────────────────────────────────────────
     const results = [];
     for (const enrollment of enrollments) {
+      if (quarantined.includes(enrollment.localId)) {
+        results.push({ localId: enrollment.localId, status: 'quarantined', reason: 'Chain tamper detected' });
+        continue;
+      }
+
       try {
-        // Re-validate each offline enrollment using its offline timestamp
         const fraudChecks = runEnrollmentFraudChecks({
           deviceTimestamp: enrollment.offlineTimestamp,
           mockGpsDetected: enrollment.mockGpsDetected || false,
@@ -278,11 +338,26 @@ router.post('/sync', authenticateAgentToken, async (req, res) => {
       }
     }
 
-    res.json({ synced: results.filter(r => r.status === 'synced').length, results });
+    const io = req.app.get('io');
+    if (io && quarantined.length > 0) {
+      io.to('stakeholder-room').emit('alert:tamper', {
+        agentId: req.agent.agentId,
+        quarantinedCount: quarantined.length,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    res.json({
+      synced: results.filter(r => r.status === 'synced').length,
+      quarantined: quarantined.length,
+      chainResults,
+      results,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET /api/enrollments — List enrollments (web portal)
 router.get('/', async (req, res) => {

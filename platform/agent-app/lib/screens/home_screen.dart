@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/providers.dart';
 import '../utils/app_theme.dart';
+import '../services/continuous_verification_service.dart';
 import 'dashboard_tab.dart';
 import 'session_tab.dart';
 import 'enrollment_screen.dart';
 import 'history_tab.dart';
+import 'app_lock_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -30,7 +32,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final sessionState = ref.watch(sessionProvider);
     final pendingCount = ref.watch(pendingCountProvider);
 
-    return Scaffold(
+    return ContinuousVerificationWrapper(
+      onLocked: () async {
+        // Stop verification service and log the agent out
+        ContinuousVerificationService.stop();
+        await ref.read(authProvider.notifier).logout();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AppLockScreen()),
+          (_) => false,
+        );
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.bgBase,
       appBar: AppBar(
         backgroundColor: AppTheme.bgSurface,
@@ -145,7 +158,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-    );
+    ),   // end Scaffold
+    );   // end ContinuousVerificationWrapper
   }
 
   void _confirmLogout(BuildContext context, WidgetRef ref) {

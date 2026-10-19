@@ -1,4 +1,4 @@
-// NIMC/NIBSS Platform — Main Express Server
+// Ufriends BioSecure Platform — Main Express Server
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
@@ -21,7 +21,8 @@ const strikeRoutes = require('./routes/strikes');
 const flagRoutes = require('./routes/flags');
 const auditRoutes = require('./routes/audit');
 const dashboardRoutes = require('./routes/dashboard');
-const settingsRoutes = require('./routes/settings');
+const settingsRoutes  = require('./routes/settings');
+const palmRoutes      = require('./routes/palm');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -133,7 +134,8 @@ app.use('/api/strikes', authenticateToken, strikeRoutes);
 app.use('/api/flags', authenticateToken, flagRoutes);
 app.use('/api/audit', authenticateToken, auditRoutes);
 app.use('/api/dashboard', authenticateToken, dashboardRoutes);
-app.use('/api/settings', authenticateToken, settingsRoutes);
+app.use('/api/settings',  authenticateToken, settingsRoutes);
+app.use('/api/palm',      palmRoutes);   // agent-token auth handled inside route
 
 // ─────────────────────────────────────────────────────────────────
 // ERROR HANDLING
@@ -155,10 +157,42 @@ app.use((req, res) => {
 // ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
+  // Detect current LAN IP dynamically (handles IP changes automatically)
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  let lanIp = '127.0.0.1';
+  outer: for (const iface of Object.values(nets)) {
+    for (const addr of iface) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        lanIp = addr.address;
+        break outer;
+      }
+    }
+  }
+
   logger.info(`🚀 Ufriends BioSecure API running on 0.0.0.0:${PORT}`);
   logger.info(`🔌 Socket.io enabled for real-time events`);
   logger.info(`🌍 Environment: ${process.env.NODE_ENV}`);
-  logger.info(`📱 LAN access: http://10.146.232.21:${PORT}/api/health`);
+  logger.info(`📱 LAN access: http://${lanIp}:${PORT}/api/health`);
+
+  // ── mDNS advertisement ──────────────────────────────────────────────
+  // Phone discovers server as 'biosecure-api.local' — works even when IP changes
+  try {
+    const mdns = require('multicast-dns')();
+    const currentIp = lanIp;
+    mdns.on('query', (query) => {
+      const relevant = query.questions.find(
+        (q) => q.name === 'biosecure-api.local' && (q.type === 'A' || q.type === 'ANY')
+      );
+      if (!relevant) return;
+      mdns.respond({
+        answers: [{ name: 'biosecure-api.local', type: 'A', ttl: 30, data: currentIp }],
+      });
+    });
+    logger.info(`📡 mDNS: advertising as biosecure-api.local → ${currentIp}`);
+  } catch (e) {
+    logger.warn(`mDNS unavailable: ${e.message}`);
+  }
 });
 
 module.exports = { app, io };

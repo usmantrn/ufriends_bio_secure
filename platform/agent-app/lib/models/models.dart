@@ -13,6 +13,7 @@ class AgentModel {
   final int strikeCount;
   final String? organizationId;
   final String? organizationName;
+  final bool biometricEnrolled;
 
   AgentModel({
     required this.id,
@@ -28,6 +29,7 @@ class AgentModel {
     required this.strikeCount,
     this.organizationId,
     this.organizationName,
+    this.biometricEnrolled = false,
   });
 
   factory AgentModel.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,41 @@ class AgentModel {
       strikeCount: json['strikeCount'] as int? ?? 0,
       organizationId: json['organizationId'] as String?,
       organizationName: json['organization']?['name'] as String?,
+      biometricEnrolled: json['biometricEnrolled'] as bool? ?? false,
+    );
+  }
+
+  AgentModel copyWith({
+    String? id,
+    String? fullName,
+    String? email,
+    String? licenseNumber,
+    String? licenseStatus,
+    String? operatingState,
+    String? operatingLGA,
+    double? operatingGpsLat,
+    double? operatingGpsLng,
+    double? operatingRadiusKm,
+    int? strikeCount,
+    String? organizationId,
+    String? organizationName,
+    bool? biometricEnrolled,
+  }) {
+    return AgentModel(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      licenseNumber: licenseNumber ?? this.licenseNumber,
+      licenseStatus: licenseStatus ?? this.licenseStatus,
+      operatingState: operatingState ?? this.operatingState,
+      operatingLGA: operatingLGA ?? this.operatingLGA,
+      operatingGpsLat: operatingGpsLat ?? this.operatingGpsLat,
+      operatingGpsLng: operatingGpsLng ?? this.operatingGpsLng,
+      operatingRadiusKm: operatingRadiusKm ?? this.operatingRadiusKm,
+      strikeCount: strikeCount ?? this.strikeCount,
+      organizationId: organizationId ?? this.organizationId,
+      organizationName: organizationName ?? this.organizationName,
+      biometricEnrolled: biometricEnrolled ?? this.biometricEnrolled,
     );
   }
 

@@ -7,7 +7,9 @@ import '../providers/providers.dart';
 import '../services/antifraud_service.dart';
 import '../services/offline_queue_service.dart';
 import '../utils/app_theme.dart';
-import 'camera_scanner_screen.dart';
+import 'face_liveness_screen.dart';
+import 'palm_scanner_screen.dart';
+import 'biometric_gate_screen.dart';
 
 class EnrollmentScreen extends ConsumerStatefulWidget {
   const EnrollmentScreen({super.key});
@@ -110,6 +112,25 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
       await _runSecurityChecks();
     }
 
+    // ── Biometric gate: agent must verify face before submitting enrollment ──
+    if (!mounted) return;
+    final biometricOk = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const BiometricGateScreen(
+          title: 'Confirm Enrollment',
+          subtitle: 'Agent biometric required before submission',
+          requireFace: true,
+          requirePalm: false,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (biometricOk != true) {
+      setState(() => _submitError = 'Agent biometric verification required to submit.');
+      return;
+    }
+
     setState(() { _isSubmitting = true; _submitError = null; });
 
     final sessionState = ref.read(sessionProvider);
@@ -131,13 +152,14 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
       'vpnDetected': checks.vpnDetected,
       'clockDriftMs': checks.clockDriftMs,
       'enrollmentSessionId': sessionState.session!.id,
-      // Use captured biometric arrays
-      'rgbFaceDescriptor': _faceData ?? List.generate(128, (i) => 0.01 * i),
-      'irFaceDescriptor': _faceData ?? List.generate(128, (i) => 0.01 * i),
-      'rightPalmVeinTemplate': _rightPalmData ?? List.generate(64, (i) => 0.02 * i),
-      'leftPalmVeinTemplate': _leftPalmData ?? List.generate(64, (i) => 0.02 * i),
-      'rightPalmVisible': _rightPalmData ?? List.generate(64, (i) => 0.015 * i),
-      'leftPalmVisible': _leftPalmData ?? List.generate(64, (i) => 0.015 * i),
+      // Palm vein templates — 298-dim L2-normalised vectors from PalmVeinExtractor
+      // Layout: [HOG 256] + [MediaPipe geometry 42] = 298 dimensions
+      // rightPalmVeinTemplate = NIR channel (used by dedup engine)
+      // rightPalmVisible      = visible-light fallback
+      'rightPalmVeinTemplate': _rightPalmData ?? List.generate(298, (i) => 0.0),
+      'leftPalmVeinTemplate':  _leftPalmData  ?? List.generate(298, (i) => 0.0),
+      'rightPalmVisible':      _rightPalmData ?? List.generate(298, (i) => 0.0),
+      'leftPalmVisible':       _leftPalmData  ?? List.generate(298, (i) => 0.0),
     };
 
     try {
@@ -218,10 +240,19 @@ class _EnrollmentScreenState extends ConsumerState<EnrollmentScreen> {
         rightPalmData: _rightPalmData,
         leftPalmData: _leftPalmData,
         onCapture: (type) async {
-          final data = await Navigator.push<List<double>>(
-            context,
-            MaterialPageRoute(builder: (_) => CameraScannerScreen(scanType: type)),
-          );
+          List<double>? data;
+          if (type == 'Face') {
+            data = await Navigator.push<List<double>>(
+              context,
+              MaterialPageRoute(builder: (_) => const FaceLivenessScreen()),
+            );
+          } else {
+            final side = type == 'Right Palm' ? 'Right' : 'Left';
+            data = await Navigator.push<List<double>>(
+              context,
+              MaterialPageRoute(builder: (_) => PalmScannerScreen(side: side)),
+            );
+          }
           if (data != null) {
             setState(() {
               if (type == 'Face') _faceData = data;
@@ -375,21 +406,21 @@ class _EnrollmentForm extends StatelessWidget {
           _SectionLabel('Biometric Capture'),
           
           _BiometricCaptureButton(
-            label: 'Capture Face (IR + RGB)',
-            icon: Icons.face,
+            label: 'Capture Face — 3D Liveness Check',
+            icon: Icons.face_retouching_natural,
             isCaptured: faceData != null,
             onTap: () => onCapture('Face'),
           ),
           const SizedBox(height: 10),
           _BiometricCaptureButton(
-            label: 'Capture Right Palm Vein',
-            icon: Icons.pan_tool,
+            label: 'Capture Right Palm Ridge',
+            icon: Icons.pan_tool_alt,
             isCaptured: rightPalmData != null,
             onTap: () => onCapture('Right Palm'),
           ),
           const SizedBox(height: 10),
           _BiometricCaptureButton(
-            label: 'Capture Left Palm Vein',
+            label: 'Capture Left Palm Ridge',
             icon: Icons.pan_tool,
             isCaptured: leftPalmData != null,
             onTap: () => onCapture('Left Palm'),

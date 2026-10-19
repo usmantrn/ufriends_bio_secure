@@ -12,21 +12,39 @@ final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 class AuthState {
   final AgentModel? agent;
   final String? deviceId;
+  final bool isInitializing;
   final bool loading;
   final String? error;
+  final bool biometricVerified;
 
-  const AuthState({this.agent, this.deviceId, this.loading = false, this.error});
+  const AuthState({
+    this.agent,
+    this.deviceId,
+    this.isInitializing = true,
+    this.loading = false,
+    this.error,
+    this.biometricVerified = false,
+  });
 
-  AuthState copyWith({AgentModel? agent, String? deviceId, bool? loading, String? error}) {
+  AuthState copyWith({
+    AgentModel? agent,
+    String? deviceId,
+    bool? isInitializing,
+    bool? loading,
+    String? error,
+    bool? biometricVerified,
+  }) {
     return AuthState(
       agent: agent ?? this.agent,
       deviceId: deviceId ?? this.deviceId,
+      isInitializing: isInitializing ?? this.isInitializing,
       loading: loading ?? this.loading,
       error: error,
+      biometricVerified: biometricVerified ?? this.biometricVerified,
     );
   }
 
-  bool get isLoggedIn => agent != null;
+  bool get isLoggedIn => agent != null && biometricVerified;
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -37,21 +55,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _tryRestoreSession() async {
-    state = state.copyWith(loading: true);
+    state = state.copyWith(isInitializing: true);
     try {
       final token = await StorageService.getAccessToken();
       if (token != null) {
         final agent = await _api.getMyProfile();
         if (agent == null) throw Exception('Profile returned null');
         final deviceId = await StorageService.getDeviceId();
-        state = state.copyWith(agent: agent, deviceId: deviceId, loading: false);
+        state = state.copyWith(
+          agent: agent,
+          deviceId: deviceId,
+          isInitializing: false,
+          loading: false,
+          biometricVerified: true,
+        );
       } else {
-        state = state.copyWith(loading: false);
+        state = state.copyWith(isInitializing: false, loading: false);
       }
     } catch (e) {
       // Clear stale tokens but preserve error so login screen can display it
       await StorageService.clearAll();
-      state = state.copyWith(loading: false);
+      state = state.copyWith(isInitializing: false, loading: false);
     }
   }
 
@@ -85,6 +109,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         agent: agent,
         deviceId: result['deviceId'] as String,
         loading: false,
+        biometricVerified: false,
       );
       return true;
     } catch (e) {
@@ -96,15 +121,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  void setBiometricVerified({bool enrolled = false}) {
+    if (state.agent != null) {
+      final updatedAgent = enrolled
+          ? state.agent!.copyWith(biometricEnrolled: true)
+          : state.agent;
+      state = state.copyWith(
+        agent: updatedAgent,
+        biometricVerified: true,
+      );
+    }
+  }
+
   Future<void> logout() async {
-    await _api.logout();
+    try {
+      await _api.logout();
+    } catch (_) {}
     await StorageService.clearAll();
-    state = const AuthState();
+    state = const AuthState(isInitializing: false);
   }
 
   String _parseError(dynamic e) {
     if (e is DioException) {
-      return e.response?.data?['error'] as String? ?? 'Connection failed';
+      if (e.response?.data is Map && e.response?.data['error'] != null) {
+        return e.response!.data['error'] as String;
+      }
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        return 'Cannot connect to server (${e.requestOptions.baseUrl}). Check network or USB connection.';
+      }
+      return e.message ?? 'Connection failed';
     }
     return e.toString();
   }

@@ -2,30 +2,33 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import '../models/models.dart';
 import 'storage_service.dart';
+import 'server_discovery_service.dart';
 
 /// API client for the Ufriends BioSecure backend (port 3001)
 class ApiService {
-  // Desktop (Linux/Windows) → localhost; Android phone → machine's LAN IP
-  static String get _baseUrl {
-    if (Platform.isAndroid) {
-      return 'http://10.146.232.21:3001/api';
-    }
-    return 'http://localhost:3001/api';
-  }
-
   late final Dio _dio;
+  static String? _resolvedBaseUrl;
 
   ApiService() {
+    // Start with a temporary Dio; baseUrl is set after discovery
     _dio = Dio(BaseOptions(
-      baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
     ));
 
+    // Resolve the server URL in background and update Dio
+    _resolveUrl();
+
     // Request interceptor — attach JWT using StorageService
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        // Ensure URL is resolved before sending any request
+        if (_resolvedBaseUrl == null) {
+          _resolvedBaseUrl = await ServerDiscoveryService.resolveBaseUrl();
+        }
+        options.baseUrl = _resolvedBaseUrl!;
+
         final token = await StorageService.getAccessToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -33,13 +36,21 @@ class ApiService {
         handler.next(options);
       },
       onError: (error, handler) async {
+        // Clear cached URL on network failure so next request re-discovers
+        if (error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.connectionError) {
+          _resolvedBaseUrl = null;
+          await ServerDiscoveryService.clearCache();
+        }
+
         // 401 → attempt token refresh
         if (error.response?.statusCode == 401) {
           final refreshToken = await StorageService.getRefreshToken();
           if (refreshToken != null) {
             try {
+              final baseUrl = _resolvedBaseUrl ?? await ServerDiscoveryService.resolveBaseUrl();
               final resp = await Dio().post(
-                '$_baseUrl/auth/refresh',
+                '$baseUrl/auth/refresh',
                 data: {'refreshToken': refreshToken},
               );
               final newToken = resp.data['accessToken'] as String;
@@ -59,6 +70,11 @@ class ApiService {
         handler.next(error);
       },
     ));
+  }
+
+  Future<void> _resolveUrl() async {
+    _resolvedBaseUrl = await ServerDiscoveryService.resolveBaseUrl();
+    _dio.options.baseUrl = _resolvedBaseUrl!;
   }
 
   // ─── Auth ─────────────────────────────────────────────────────────
@@ -93,6 +109,32 @@ class ApiService {
     try {
       await _dio.post('/auth/logout');
     } catch (_) {}
+  }
+
+  // ─── Biometric enrollment & verification ──────────────────────────
+
+  /// Enroll agent biometric templates (first login)
+  Future<Map<String, dynamic>> enrollBiometric({
+    required List<double> faceDescriptor,
+    required List<double> palmDescriptor,
+  }) async {
+    final resp = await _dio.post('/auth/biometric-enroll', data: {
+      'faceDescriptor': faceDescriptor,
+      'palmDescriptor': palmDescriptor,
+    });
+    return resp.data as Map<String, dynamic>;
+  }
+
+  /// Verify agent biometrics against stored templates (subsequent logins)
+  Future<Map<String, dynamic>> verifyBiometric({
+    required List<double> faceDescriptor,
+    required List<double> palmDescriptor,
+  }) async {
+    final resp = await _dio.post('/auth/biometric-verify', data: {
+      'faceDescriptor': faceDescriptor,
+      'palmDescriptor': palmDescriptor,
+    });
+    return resp.data as Map<String, dynamic>;
   }
 
   // ─── Sessions ─────────────────────────────────────────────────────
@@ -163,8 +205,9 @@ class ApiService {
   // ─── Connectivity check ───────────────────────────────────────────
 
   static Future<bool> isServerReachable() async {
-    final host = Platform.isAndroid ? '10.146.232.21' : 'localhost';
     try {
+      final baseUrl = _resolvedBaseUrl ?? await ServerDiscoveryService.resolveBaseUrl();
+      final host = Uri.parse(baseUrl).host;
       final socket = await Socket.connect(host, 3001,
           timeout: const Duration(seconds: 3));
       socket.destroy();

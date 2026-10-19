@@ -8,6 +8,7 @@ const logger = require('../lib/logger');
  */
 const createAuditLog = async ({
   actorId = null,
+  actorType = null,
   actorRole = null,
   action,
   targetType = null,
@@ -18,15 +19,22 @@ const createAuditLog = async ({
   userAgent = null,
 }) => {
   try {
+    // actorId foreign-keys to NimcUser. If actor is an Agent, store in metadata instead.
+    const isAgent = actorType === 'Agent' || actorRole === 'AGENT';
+    const effectiveActorId = isAgent ? null : actorId;
+    const effectiveMetadata = isAgent && actorId
+      ? { ...(metadata || {}), agentActorId: actorId }
+      : metadata;
+
     await prisma.auditLog.create({
       data: {
-        actorId,
+        actorId: effectiveActorId,
         actorRole,
         action,
         targetType,
         targetId,
         description,
-        metadata,
+        metadata: effectiveMetadata,
         ipAddress,
         userAgent,
         timestamp: new Date(),

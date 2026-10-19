@@ -56,7 +56,13 @@ export default function AppShell({ children }) {
 
     socket.on('flag:raised', (data) => {
       setBadges(b => ({ ...b, openFlags: b.openFlags + 1 }));
-      setLiveEvents(prev => [{ type: 'flag', ...data, id: Date.now() }, ...prev.slice(0, 9)]);
+      setLiveEvents(prev => [{ type: 'flag', ...data, id: Date.now() }, ...prev.slice(0, 19)]);
+    });
+
+    // Merkle chain tamper alert — raised when offline sync data is modified before sync
+    socket.on('alert:tamper', (data) => {
+      setBadges(b => ({ ...b, openFlags: b.openFlags + 1 }));
+      setLiveEvents(prev => [{ type: 'tamper', ...data, id: Date.now() }, ...prev.slice(0, 19)]);
     });
 
     return () => socket.disconnect();

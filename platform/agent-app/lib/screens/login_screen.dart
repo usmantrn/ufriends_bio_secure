@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/providers.dart';
 import '../services/device_fingerprint_service.dart';
 import '../utils/app_theme.dart';
+import 'biometric_gate_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -26,9 +27,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  String? _loginError;
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _detectingDevice = true);
+    setState(() { _detectingDevice = true; _loginError = null; });
     final deviceInfo = await DeviceFingerprintService.getDeviceInfo();
     setState(() => _detectingDevice = false);
     if (!mounted) return;
@@ -39,15 +42,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       deviceInfo: deviceInfo,
     );
 
+    if (success && mounted) {
+      // ── Biometric gate: check if agent needs enrollment or verification ──
+      final agent = ref.read(authProvider).agent;
+      final isEnrolled = agent?.biometricEnrolled ?? false;
+
+      final biometricOk = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BiometricGateScreen(
+            title: isEnrolled ? 'Agent Verification' : 'Biometric Enrollment',
+            subtitle: isEnrolled
+                ? 'Verify your identity to access the platform'
+                : 'First login — register your face and palm',
+            requireFace: true,
+            requirePalm: true,
+            mode: isEnrolled ? BiometricMode.verification : BiometricMode.enrollment,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (biometricOk == true) {
+        ref.read(authProvider.notifier).setBiometricVerified(enrolled: !isEnrolled);
+      } else {
+        // Agent cancelled biometric — log them out
+        await ref.read(authProvider.notifier).logout();
+        setState(() => _loginError = isEnrolled
+            ? 'Biometric verification cancelled. Please log in again.'
+            : 'Biometric enrollment cancelled. Please log in again.');
+      }
+      return;
+    }
+
     if (!success && mounted) {
-      final error = ref.read(authProvider).error;
+      final error = ref.read(authProvider).error ?? 'Login failed';
+      setState(() => _loginError = error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 16),
             const SizedBox(width: 8),
-            Expanded(child: Text(error ?? 'Login failed')),
+            Expanded(child: Text(error, style: const TextStyle(fontWeight: FontWeight.w600))),
           ]),
+          backgroundColor: const Color(0xFFDC2626),
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -177,7 +217,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onFieldSubmitted: (_) => _login(),
                       ),
 
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 12),
+
+                      // Quick-fill test account
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _emailController.text = 'amina.obiora.91@example.com';
+                              _passwordController.text = 'Agent@1234';
+                            });
+                          },
+                          icon: const Icon(Icons.person_outline, size: 14, color: AppTheme.primary),
+                          label: const Text(
+                            'Fill Amina (Test Agent)',
+                            style: TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ── Error banner ─────────────────────────────
+                      if (_loginError != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.4)),
+                          ),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _loginError!,
+                                style: const TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ]),
+                        ),
 
                       // Sign in button
                       SizedBox(

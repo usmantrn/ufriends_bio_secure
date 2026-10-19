@@ -1,5 +1,5 @@
-name: nimc_agent_app
-description: NIMC/NIBSS Biometric Enrollment Agent Application — Android, Windows & Linux desktop
+name: biosecure_agent_app
+description: Ufriends BioSecure — Biometric Enrollment Agent Application (Android, Windows & Linux)
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -26,6 +26,9 @@ dependencies:
   # Camera
   camera: ^0.11.0
 
+  # ML Kit — on-device face detection (offline)
+  google_mlkit_face_detection: ^0.11.0
+
   # GPS / Location
   geolocator: ^13.0.1
 
@@ -51,6 +54,20 @@ dependencies:
   permission_handler: ^11.3.1
   connectivity_plus: ^6.1.0
 
+  # mDNS — auto-discover backend server regardless of IP changes
+  multicast_dns: ^0.3.2+1
+  shared_preferences: ^2.3.2
+
+  # Gyroscope & accelerometer — behavioral telemetry (blueprint §4.1)
+  sensors_plus: ^6.1.1
+
+  # Image processing — palm vein feature extraction (blueprint: OpenCV pipeline)
+  image: ^4.2.0
+
+  # TFLite — MediaPipe hand landmark model (21 keypoints, lighting-independent geometry)
+  # v0.10.4 patched for Dart 3.x + JVM-17 (see pub-cache patches applied above)
+  tflite_flutter: ^0.12.1
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
@@ -60,3 +77,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/hand_landmark.tflite

@@ -9,3 +9,6 @@ build/
 *.iml
 *.log
 .env
+dist/
+coverage/
+.DS_Store
