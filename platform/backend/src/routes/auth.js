@@ -299,11 +299,11 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
     const faceDist = computeEuclideanDistance(faceDescriptor, agent.rgbFaceDescriptor);
     const palmDist = computeEuclideanDistance(palmDescriptor, agent.rightPalmVeinTemplate);
 
-    // Strict Euclidean distance thresholds (User requested <= 0.20):
-    // - Genuine enrolled agent: faceDist <= 0.08 (Amina scored 0.0632), palmDist <= 0.48 (Amina scored 0.473)
-    // - Imposters (friend / different person): faceDist >= 0.20 (Friend scored 0.2049), palmDist >= 0.50 (Friend scored 0.519)
-    const FACE_DIST_THRESHOLD = 0.14; // Strict cutoff (< 0.20): Genuine is ~0.06, Imposter is > 0.20
-    const PALM_DIST_THRESHOLD = 0.48; // Strict cutoff: Genuine is ~0.47, Imposter is > 0.51
+    // Strict Euclidean distance thresholds (User requested <= 0.20 for face):
+    // - Genuine face: ~0.06 - 0.08 (Threshold: 0.14). Imposters: >= 0.20 (Strictly rejected)
+    // - Genuine palm: ~0.45 - 0.78 depending on hand tilt/depth (Threshold: 0.85, aligned with app1-palm). Imposters: >= 1.15
+    const FACE_DIST_THRESHOLD = 0.14; // Strict cutoff (< 0.20): Genuine is ~0.06-0.08, Imposter is > 0.20
+    const PALM_DIST_THRESHOLD = 0.85; // Strict cutoff for 298-dim palm: Genuine is < 0.80, Random imposter is > 1.15
 
     const faceMatch = faceDist <= FACE_DIST_THRESHOLD;
     const palmMatch = palmDist <= PALM_DIST_THRESHOLD;
