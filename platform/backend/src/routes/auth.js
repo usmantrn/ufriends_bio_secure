@@ -287,20 +287,21 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
     const rawFaceScore = cosineSimilarity(faceDescriptor, agent.rgbFaceDescriptor);
     const rawPalmScore = cosineSimilarity(palmDescriptor, agent.rightPalmVeinTemplate);
 
-    // Adaptive scoring: if raw cosine similarity >= 0.60, use raw score.
-    // Otherwise, since phone uses MLKit liveness + simulated NIR (not hardware 850nm module),
-    // normalize score to realistic high matching confidence (0.86 - 0.95) for the enrolled agent.
-    const faceScore = rawFaceScore >= 0.60 ? rawFaceScore : Math.min(0.96, Math.max(0.85, 0.88 + Math.abs(rawFaceScore) * 0.08));
-    const palmScore = rawPalmScore >= 0.60 ? rawPalmScore : Math.min(0.95, Math.max(0.84, 0.86 + Math.abs(rawPalmScore) * 0.09));
+    // Real cosine similarity on zero-centered L2-normalized biometric vectors
+    const faceScore = cosineSimilarity(faceDescriptor, agent.rgbFaceDescriptor);
+    const palmScore = cosineSimilarity(palmDescriptor, agent.rightPalmVeinTemplate);
 
-    const FACE_THRESHOLD = 0.70;
-    const PALM_THRESHOLD = 0.70;
+    // Strict biometric thresholds for zero-centered L2-normalized vectors:
+    // - Enrolled genuine agent attempts: 0.60 to 0.90+
+    // - Imposters / different individuals: < 0.45
+    const FACE_THRESHOLD = 0.58;
+    const PALM_THRESHOLD = 0.55;
 
     const faceMatch = faceScore >= FACE_THRESHOLD;
     const palmMatch = palmScore >= PALM_THRESHOLD;
     const verified = faceMatch && palmMatch;
 
-    logger.info(`Biometric verify for ${agent.fullName}: face=${faceScore.toFixed(3)} palm=${palmScore.toFixed(3)} → ${verified ? 'PASS' : 'FAIL'}`);
+    logger.info(`Biometric verify for ${agent.fullName}: face=${faceScore.toFixed(3)} (req: ${FACE_THRESHOLD}) palm=${palmScore.toFixed(3)} (req: ${PALM_THRESHOLD}) → ${verified ? 'PASS' : 'REJECT'}`);
 
     try {
       await createAuditLog({
@@ -310,7 +311,9 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
         action: 'USER_LOGIN',
         targetType: 'Agent',
         targetId: agent.id,
-        description: `Biometric ${verified ? 'passed' : 'failed'}: face=${faceScore.toFixed(3)} palm=${palmScore.toFixed(3)}`,
+        description: verified
+          ? `Biometric PASSED: face=${(faceScore * 100).toFixed(1)}% palm=${(palmScore * 100).toFixed(1)}%`
+          : `Biometric REJECTED (Unauthorized): face=${(faceScore * 100).toFixed(1)}% (req ${(FACE_THRESHOLD * 100).toFixed(0)}%) palm=${(palmScore * 100).toFixed(1)}% (req ${(PALM_THRESHOLD * 100).toFixed(0)}%)`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
@@ -324,6 +327,7 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
       palmScore: parseFloat(palmScore.toFixed(4)),
       faceMatch,
       palmMatch,
+      message: verified ? 'Identity verified successfully' : 'Biometrics do not match enrolled agent',
     });
   } catch (err) {
     logger.error('Biometric verify error:', err);

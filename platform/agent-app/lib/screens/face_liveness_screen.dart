@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as img;
 import '../utils/app_theme.dart';
 
 /// Face Liveness Screen — Reliable implementation using XFile capture
@@ -50,6 +52,7 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
   String? _errorMsg;
   bool _isCapturing = false;
   bool _initialized = false;
+  List<double>? _capturedFaceDescriptor;
 
   // Retry timer — re-captures every 800ms
   Timer? _captureTimer;
@@ -70,6 +73,8 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
       _detector = FaceDetector(
         options: FaceDetectorOptions(
           enableClassification: true,
+          enableLandmarks: true,
+          enableContours: true,
           performanceMode: FaceDetectorMode.accurate, // More reliable
         ),
       );
@@ -105,6 +110,14 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
       final inputImage = InputImage.fromFilePath(xfile.path);
       final faces = await _detector!.processImage(inputImage);
 
+      // Read image bytes for biometric descriptor extraction before deleting
+      Uint8List? rawBytes;
+      if (faces.isNotEmpty) {
+        try {
+          rawBytes = await File(xfile.path).readAsBytes();
+        } catch (_) {}
+      }
+
       // Clean up temp file
       try { File(xfile.path).deleteSync(); } catch (_) {}
 
@@ -128,6 +141,14 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
         case _LivenessStep.straight:
           stepPassed = yaw.abs() < 12;
           hint = stepPassed ? 'Hold still…' : 'Face the camera directly';
+          // Extract real deterministic facial biometric descriptor
+          if (stepPassed && rawBytes != null) {
+            try {
+              _capturedFaceDescriptor = _extractFaceDescriptor(face, rawBytes);
+            } catch (e) {
+              debugPrint('Error extracting face descriptor: $e');
+            }
+          }
           break;
         case _LivenessStep.turnLeft:
           // Front camera on Android: turning head to the user's LEFT produces a POSITIVE Euler Y (yaw > 0)
@@ -188,9 +209,130 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
   }
 
   void _returnResult() {
-    final rng = Random(DateTime.now().microsecondsSinceEpoch);
-    final descriptor = List.generate(128, (_) => rng.nextDouble() * 2 - 1);
+    final descriptor = _capturedFaceDescriptor ?? List<double>.filled(128, 0.0);
     Navigator.pop(context, descriptor);
+  }
+
+  List<double> _extractFaceDescriptor(Face face, Uint8List imageBytes) {
+    // ── 1. Geometric proportions from landmarks & contours (64 dims) ──────
+    final geom = <double>[];
+
+    final le = face.landmarks[FaceLandmarkType.leftEye]?.position;
+    final re = face.landmarks[FaceLandmarkType.rightEye]?.position;
+    final nb = face.landmarks[FaceLandmarkType.noseBase]?.position;
+    final lm = face.landmarks[FaceLandmarkType.leftMouth]?.position;
+    final rm = face.landmarks[FaceLandmarkType.rightMouth]?.position;
+    final bm = face.landmarks[FaceLandmarkType.bottomMouth]?.position;
+    final lc = face.landmarks[FaceLandmarkType.leftCheek]?.position;
+    final rc = face.landmarks[FaceLandmarkType.rightCheek]?.position;
+
+    // Normalization baseline: Inter-pupillary distance (IPD)
+    double ipd = 100.0;
+    if (le != null && re != null) {
+      final dx = (le.x - re.x).toDouble();
+      final dy = (le.y - re.y).toDouble();
+      ipd = sqrt(dx * dx + dy * dy);
+      if (ipd < 10) ipd = 100.0;
+    } else {
+      ipd = face.boundingBox.width * 0.45;
+    }
+
+    double dist(Point<int>? p1, Point<int>? p2) {
+      if (p1 == null || p2 == null) return 0.0;
+      final dx = (p1.x - p2.x).toDouble();
+      final dy = (p1.y - p2.y).toDouble();
+      return sqrt(dx * dx + dy * dy) / ipd;
+    }
+
+    // Pairwise normalized distances between key landmarks (28 features)
+    final keyPoints = [le, re, nb, lm, rm, bm, lc, rc];
+    for (int i = 0; i < keyPoints.length; i++) {
+      for (int j = i + 1; j < keyPoints.length; j++) {
+        geom.add(dist(keyPoints[i], keyPoints[j]));
+      }
+    }
+
+    // Bounding box proportions (3 features)
+    final bbH = face.boundingBox.height > 0 ? face.boundingBox.height : 1.0;
+    geom.add(face.boundingBox.width / bbH);
+    geom.add(face.boundingBox.width / ipd);
+    geom.add(face.boundingBox.height / ipd);
+
+    // Jawline / chin contour sample points relative to noseBase (16 features)
+    final faceContour = face.contours[FaceContourType.face]?.points;
+    if (faceContour != null && faceContour.isNotEmpty && nb != null) {
+      final step = (faceContour.length / 16).floor().clamp(1, faceContour.length);
+      for (int i = 0; i < 16; i++) {
+        final idx = (i * step).clamp(0, faceContour.length - 1);
+        final pt = faceContour[idx];
+        final dx = (pt.x - nb.x).toDouble();
+        final dy = (pt.y - nb.y).toDouble();
+        geom.add(sqrt(dx * dx + dy * dy) / ipd);
+      }
+    }
+
+    // Pad or trim to exactly 64 geometric features
+    while (geom.length < 64) {
+      geom.add(geom.isNotEmpty ? geom[geom.length % geom.length] * 0.5 : 0.0);
+    }
+    final geom64 = geom.sublist(0, 64);
+
+    // ── 2. Facial texture & spatial gradient descriptor (64 dims) ────────
+    final texture = <double>[];
+    try {
+      final decoded = img.decodeImage(imageBytes);
+      if (decoded != null) {
+        final bb = face.boundingBox;
+        final cropX = bb.left.toInt().clamp(0, decoded.width - 1);
+        final cropY = bb.top.toInt().clamp(0, decoded.height - 1);
+        final cropW = bb.width.toInt().clamp(1, decoded.width - cropX);
+        final cropH = bb.height.toInt().clamp(1, decoded.height - cropY);
+
+        final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
+        final resized = img.copyResize(cropped, width: 32, height: 32);
+        final gray = img.grayscale(resized);
+
+        // 4x4 spatial grid (16 cells, each 8x8 pixels)
+        // 4 features per cell: mean intensity, dx gradient, dy gradient, gradient magnitude
+        for (int gy = 0; gy < 4; gy++) {
+          for (int gx = 0; gx < 4; gx++) {
+            double sum = 0, sumDx = 0, sumDy = 0;
+            for (int y = gy * 8; y < (gy + 1) * 8; y++) {
+              for (int x = gx * 8; x < (gx + 1) * 8; x++) {
+                final v = gray.getPixel(x, y).r.toDouble();
+                sum += v;
+                if (x > 0 && x < 31) {
+                  sumDx += (gray.getPixel(x + 1, y).r.toDouble() - gray.getPixel(x - 1, y).r.toDouble()).abs();
+                }
+                if (y > 0 && y < 31) {
+                  sumDy += (gray.getPixel(x, y + 1).r.toDouble() - gray.getPixel(x, y - 1).r.toDouble()).abs();
+                }
+              }
+            }
+            texture.add(sum / (64.0 * 255.0));
+            texture.add(sumDx / (64.0 * 255.0));
+            texture.add(sumDy / (64.0 * 255.0));
+            texture.add(sqrt(sumDx * sumDx + sumDy * sumDy) / (64.0 * 255.0));
+          }
+        }
+      }
+    } catch (_) {}
+
+    while (texture.length < 64) {
+      texture.add(0.0);
+    }
+    final text64 = texture.sublist(0, 64);
+
+    // Combine: 64 geom + 64 texture = 128-dim biometric face descriptor
+    final raw128 = [...geom64, ...text64];
+
+    // Zero-center for true discriminative cosine similarity
+    final mean = raw128.reduce((a, b) => a + b) / raw128.length;
+    final centered = raw128.map((v) => v - mean).toList();
+
+    // L2-normalize
+    final norm = sqrt(centered.fold(0.0, (s, v) => s + v * v));
+    return norm > 0 ? centered.map((v) => v / norm).toList() : centered;
   }
 
   @override

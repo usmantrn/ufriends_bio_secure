@@ -119,8 +119,12 @@ class PalmVeinExtractor {
     // Concatenate: [HOG 256] + [Geometry 42] = [298-dim combined template]
     final combined = [...avgHog, ...avgGeom];
 
-    // L2-normalise the full 298-dim vector for cosine similarity
-    final normVector = _l2Normalize(combined);
+    // Zero-center the combined vector so positive/negative crease and vein variances are captured
+    final mean = combined.reduce((a, b) => a + b) / combined.length;
+    final centered = combined.map((v) => v - mean).toList();
+
+    // L2-normalise for true discriminative cosine similarity
+    final normVector = _l2Normalize(centered);
 
     final avgQuality = qualityScores.reduce((a, b) => a + b) / qualityScores.length;
 
