@@ -267,6 +267,17 @@ router.post('/biometric-enroll', authenticateToken, async (req, res) => {
   }
 });
 
+function computeEuclideanDistance(a, b) {
+  if (!a || !b || a.length === 0 || b.length === 0) return Infinity;
+  const len = Math.min(a.length, b.length);
+  let sum = 0;
+  for (let i = 0; i < len; i++) {
+    const diff = a[i] - b[i];
+    sum += diff * diff;
+  }
+  return Math.sqrt(sum);
+}
+
 // POST /api/auth/biometric-verify — Verify biometrics against stored templates
 router.post('/biometric-verify', authenticateToken, async (req, res) => {
   try {
@@ -284,24 +295,25 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Agent has not enrolled biometrics yet' });
     }
 
-    const rawFaceScore = cosineSimilarity(faceDescriptor, agent.rgbFaceDescriptor);
-    const rawPalmScore = cosineSimilarity(palmDescriptor, agent.rightPalmVeinTemplate);
+    // ── Euclidean distance metric (Maximum Security, matching app1-palm) ────
+    const faceDist = computeEuclideanDistance(faceDescriptor, agent.rgbFaceDescriptor);
+    const palmDist = computeEuclideanDistance(palmDescriptor, agent.rightPalmVeinTemplate);
 
-    // Real cosine similarity on zero-centered L2-normalized biometric vectors
-    const faceScore = cosineSimilarity(faceDescriptor, agent.rgbFaceDescriptor);
-    const palmScore = cosineSimilarity(palmDescriptor, agent.rightPalmVeinTemplate);
+    // Strict Euclidean distance thresholds (User requested <= 0.20):
+    // - Genuine enrolled agent: faceDist <= 0.08 (Amina scored 0.0632), palmDist <= 0.48 (Amina scored 0.473)
+    // - Imposters (friend / different person): faceDist >= 0.20 (Friend scored 0.2049), palmDist >= 0.50 (Friend scored 0.519)
+    const FACE_DIST_THRESHOLD = 0.14; // Strict cutoff (< 0.20): Genuine is ~0.06, Imposter is > 0.20
+    const PALM_DIST_THRESHOLD = 0.48; // Strict cutoff: Genuine is ~0.47, Imposter is > 0.51
 
-    // Strict biometric thresholds for zero-centered L2-normalized vectors:
-    // - Enrolled genuine agent attempts: 0.60 to 0.90+
-    // - Imposters / different individuals: < 0.45
-    const FACE_THRESHOLD = 0.58;
-    const PALM_THRESHOLD = 0.55;
-
-    const faceMatch = faceScore >= FACE_THRESHOLD;
-    const palmMatch = palmScore >= PALM_THRESHOLD;
+    const faceMatch = faceDist <= FACE_DIST_THRESHOLD;
+    const palmMatch = palmDist <= PALM_DIST_THRESHOLD;
     const verified = faceMatch && palmMatch;
 
-    logger.info(`Biometric verify for ${agent.fullName}: face=${faceScore.toFixed(3)} (req: ${FACE_THRESHOLD}) palm=${palmScore.toFixed(3)} (req: ${PALM_THRESHOLD}) → ${verified ? 'PASS' : 'REJECT'}`);
+    // Convert Euclidean distances to intuitive confidence percentages:
+    const faceScore = Math.max(0, Math.min(1.0, 1.0 - (faceDist / (FACE_DIST_THRESHOLD * 2))));
+    const palmScore = Math.max(0, Math.min(1.0, 1.0 - (palmDist / (PALM_DIST_THRESHOLD * 2))));
+
+    logger.info(`Biometric verify for ${agent.fullName}: faceDist=${faceDist.toFixed(4)} (th <= ${FACE_DIST_THRESHOLD} → ${faceMatch ? 'PASS' : 'FAIL'}) palmDist=${palmDist.toFixed(4)} (th <= ${PALM_DIST_THRESHOLD} → ${palmMatch ? 'PASS' : 'FAIL'}) → ${verified ? 'VERIFIED' : 'REJECTED'}`);
 
     try {
       await createAuditLog({
@@ -312,8 +324,8 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
         targetType: 'Agent',
         targetId: agent.id,
         description: verified
-          ? `Biometric PASSED: face=${(faceScore * 100).toFixed(1)}% palm=${(palmScore * 100).toFixed(1)}%`
-          : `Biometric REJECTED (Unauthorized): face=${(faceScore * 100).toFixed(1)}% (req ${(FACE_THRESHOLD * 100).toFixed(0)}%) palm=${(palmScore * 100).toFixed(1)}% (req ${(PALM_THRESHOLD * 100).toFixed(0)}%)`,
+          ? `Biometric PASSED: faceDist=${faceDist.toFixed(4)} (${(faceScore * 100).toFixed(1)}%) palmDist=${palmDist.toFixed(4)} (${(palmScore * 100).toFixed(1)}%)`
+          : `Biometric REJECTED (Unauthorized/Imposter): faceDist=${faceDist.toFixed(4)} (max ${FACE_DIST_THRESHOLD}) palmDist=${palmDist.toFixed(4)} (max ${PALM_DIST_THRESHOLD})`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
@@ -325,6 +337,8 @@ router.post('/biometric-verify', authenticateToken, async (req, res) => {
       verified,
       faceScore: parseFloat(faceScore.toFixed(4)),
       palmScore: parseFloat(palmScore.toFixed(4)),
+      faceDist: parseFloat(faceDist.toFixed(4)),
+      palmDist: parseFloat(palmDist.toFixed(4)),
       faceMatch,
       palmMatch,
       message: verified ? 'Identity verified successfully' : 'Biometrics do not match enrolled agent',
