@@ -126,20 +126,34 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
 
       switch (_step) {
         case _LivenessStep.straight:
-          stepPassed = yaw.abs() < 15;
+          stepPassed = yaw.abs() < 12;
           hint = stepPassed ? 'Hold still…' : 'Face the camera directly';
           break;
         case _LivenessStep.turnLeft:
-          stepPassed = yaw < -18;
-          hint = stepPassed ? 'Good!' : 'Turn more to your LEFT (yaw: ${yaw.toStringAsFixed(0)}°)';
+          // Front camera on Android: turning head to the user's LEFT produces a POSITIVE Euler Y (yaw > 0)
+          stepPassed = yaw > 14;
+          if (stepPassed) {
+            hint = 'Left turn detected! ✓';
+          } else if (yaw > 6) {
+            hint = 'Turning left… keep turning (yaw: +${yaw.toStringAsFixed(0)}°)';
+          } else {
+            hint = 'Turn your head LEFT ←';
+          }
           break;
         case _LivenessStep.turnRight:
-          stepPassed = yaw > 18;
-          hint = stepPassed ? 'Good!' : 'Turn more to your RIGHT (yaw: ${yaw.toStringAsFixed(0)}°)';
+          // Front camera on Android: turning head to the user's RIGHT produces a NEGATIVE Euler Y (yaw < 0)
+          stepPassed = yaw < -14;
+          if (stepPassed) {
+            hint = 'Right turn detected! ✓';
+          } else if (yaw < -6) {
+            hint = 'Turning right… keep turning (yaw: ${yaw.toStringAsFixed(0)}°)';
+          } else {
+            hint = 'Turn your head RIGHT →';
+          }
           break;
         case _LivenessStep.blink:
-          stepPassed = leftEye < 0.3 && rightEye < 0.3;
-          hint = stepPassed ? 'Blink detected!' : 'Close both eyes fully (L:${leftEye.toStringAsFixed(2)} R:${rightEye.toStringAsFixed(2)})';
+          stepPassed = leftEye < 0.35 && rightEye < 0.35;
+          hint = stepPassed ? 'Blink detected! ✓' : 'Close both eyes fully';
           break;
         case _LivenessStep.done:
           return;

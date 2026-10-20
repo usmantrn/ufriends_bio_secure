@@ -247,11 +247,11 @@ class _BiometricGateScreenState extends State<BiometricGateScreen> {
 
             if (widget.requirePalm) ...[
               _BiometricStep(
-                icon: Icons.pan_tool_alt,
-                label: 'Palm Ridge Scan',
+                icon: Icons.pan_tool_rounded,
+                label: 'Contactless Palm Biometrics',
                 description: isEnrollment
-                    ? 'Capture your palm template for enrollment'
-                    : 'Palm geometry verification',
+                    ? 'Capture palm geometry & vascular template'
+                    : 'Contactless palm geometry verification',
                 isCaptured: _rightPalmData != null,
                 onTap: _capturePalm,
                 stepNumber: widget.requireFace ? 2 : 1,

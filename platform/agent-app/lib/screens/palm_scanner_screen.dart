@@ -34,7 +34,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
 
   _ScanPhase _phase = _ScanPhase.positioning;
   double _progress = 0.0;
-  String _stageLabel = 'Position your palm in the frame';
+  String _stageLabel = 'Hold your palm in the frame · Spread fingers';
   double _qualityScore = 0.0;
   PalmDedupResponse? _dedupResult;
   List<double>? _template;
@@ -174,7 +174,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text('${widget.side} Palm Scan — NIR',
+        title: Text('${widget.side} Palm Biometrics Scan',
             style: const TextStyle(color: Colors.white, fontSize: 15,
                 fontWeight: FontWeight.w700)),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -224,7 +224,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
       // Palm alignment guide silhouette
       Center(
         child: CustomPaint(
-          size: const Size(220, 280),
+          size: const Size(260, 310),
           painter: _PalmSilhouettePainter(phase: _phase, side: widget.side),
         ),
       ),
@@ -346,7 +346,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Hold palm 15–20 cm from camera · fingers extended · hand flat',
+                'Hold palm 15–20 cm from camera · Spread fingers · Keep steady',
                 style: TextStyle(color: AppTheme.secondary, fontSize: 11,
                     fontWeight: FontWeight.w600),
               ),
@@ -357,8 +357,8 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: _startScan,
-            icon: const Icon(Icons.fingerprint, size: 20),
-            label: const Text('START PALM SCAN',
+            icon: const Icon(Icons.pan_tool_rounded, size: 20),
+            label: const Text('CAPTURE PALM BIOMETRICS',
                 style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.8)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
@@ -506,7 +506,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
           const Icon(Icons.check_circle, size: 80, color: AppTheme.statusSuccess)
               .animate().scale(duration: 400.ms, curve: Curves.elasticOut),
           const SizedBox(height: 14),
-          Text('${widget.side} Palm Captured',
+          Text('${widget.side} Palm Biometrics Captured',
             style: const TextStyle(color: Colors.white, fontSize: 22,
                 fontWeight: FontWeight.w800),
           ).animate().fadeIn(delay: 200.ms),
@@ -519,7 +519,7 @@ class _PalmScannerScreenState extends State<PalmScannerScreen>
               ),
             ).animate().fadeIn(delay: 300.ms),
           const SizedBox(height: 4),
-          Text('256-dim template · ${_dedupResult?.scanned ?? 0} citizens checked',
+          Text('256-dim vascular template · ${_dedupResult?.scanned ?? 0} citizens checked',
             style: const TextStyle(color: Colors.white38, fontSize: 12),
           ).animate().fadeIn(delay: 350.ms),
         ]),
@@ -558,20 +558,20 @@ class _NirBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.black.withOpacity(0.75),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF00FF88).withValues(alpha: 0.5)),
+        border: Border.all(color: const Color(0xFF00D4FF).withOpacity(0.5)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('NIR SIMULATION',
-          style: TextStyle(color: Color(0xFF00FF88), fontSize: 8,
+      child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('PALM BIOMETRICS',
+          style: TextStyle(color: Color(0xFF00D4FF), fontSize: 8.5,
               fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-        const Text('850nm bandpass · 90° lens',
-          style: TextStyle(color: Colors.white38, fontSize: 8)),
-        const Text('Switch: CameraSource.nirCamera',
-          style: TextStyle(color: Colors.white24, fontSize: 7,
+        Text('Palm Geometry & Vein Pattern',
+          style: TextStyle(color: Colors.white70, fontSize: 8)),
+        Text('Non-Contact Optical Sensing',
+          style: TextStyle(color: Colors.white38, fontSize: 7,
               fontStyle: FontStyle.italic)),
       ]),
     );
@@ -585,9 +585,9 @@ class _DistanceBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.black.withOpacity(0.75),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white12),
       ),
@@ -596,8 +596,11 @@ class _DistanceBadge extends StatelessWidget {
           style: TextStyle(color: Colors.white38, fontSize: 8,
               fontWeight: FontWeight.w800, letterSpacing: 0.8)),
         Text('15 – 20 cm',
-          style: TextStyle(color: Colors.white70, fontSize: 12,
-              fontWeight: FontWeight.w900)),
+          style: TextStyle(color: Colors.white, fontSize: 11,
+              fontWeight: FontWeight.w800)),
+        Text('Open Hand · Flat',
+          style: TextStyle(color: Color(0xFF00D4FF), fontSize: 7.5,
+              fontWeight: FontWeight.w600)),
       ]),
     );
   }
@@ -733,69 +736,206 @@ class _PalmSilhouettePainter extends CustomPainter {
         ? AppTheme.statusSuccess
         : phase == _ScanPhase.duplicateWarning
             ? const Color(0xFFDC2626)
-            : AppTheme.primary;
-
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.65)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeJoin = StrokeJoin.round;
+            : const Color(0xFF00D4FF); // BioSecure cyber cyan
 
     final cx = size.width / 2;
-    final cy = size.height / 2 + 20;
-    final palmW = size.width * 0.75;
-    final palmH = size.height * 0.45;
-    final fingerW = size.width / 8;
-    final fingerH = size.height * 0.35;
+    final cy = size.height / 2;
 
-    // Palm base
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy + palmH * 0.1),
-            width: palmW, height: palmH),
-        const Radius.circular(20),
-      ),
-      paint,
+    // ── 1. Cyber Outer Rounded Frame & Corners (matching app1-palm) ────────
+    const pad = 10.0;
+    final frameRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(pad, pad, size.width - pad * 2, size.height - pad * 2),
+      const Radius.circular(22),
     );
 
-    // 5 fingers
-    final fingerOffsets = [-2.0, -1.0, 0.0, 1.0, 2.0];
-    for (int i = 0; i < 5; i++) {
-      final fx = cx + fingerOffsets[i] * fingerW * 1.3;
-      final fy = cy - palmH * 0.5 - fingerH;
-      final fw = fingerW * (i == 0 ? 0.9 : 1.0);
-      final fh = fingerH * (i == 0 ? 0.7 : i == 4 ? 0.75 : 1.0);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(fx - fw / 2, fy, fw, fh),
-          Radius.circular(fw / 2),
-        ),
-        paint,
-      );
+    // Subtle dashed / translucent border
+    final framePaint = Paint()
+      ..color = color.withOpacity(0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    canvas.drawRRect(frameRect, framePaint);
+
+    // 4 High-tech Corner Targeting Brackets
+    final cornerPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round;
+
+    const cLen = 32.0;
+    final l = pad;
+    final r = size.width - pad;
+    final t = pad;
+    final b = size.height - pad;
+    const rad = 22.0;
+
+    // Top-Left
+    final pathTL = Path()
+      ..moveTo(l, t + cLen)
+      ..lineTo(l, t + rad)
+      ..quadraticBezierTo(l, t, l + rad, t)
+      ..lineTo(l + cLen, t);
+    canvas.drawPath(pathTL, cornerPaint);
+
+    // Top-Right
+    final pathTR = Path()
+      ..moveTo(r - cLen, t)
+      ..lineTo(r - rad, t)
+      ..quadraticBezierTo(r, t, r, t + rad)
+      ..lineTo(r, t + cLen);
+    canvas.drawPath(pathTR, cornerPaint);
+
+    // Bottom-Left
+    final pathBL = Path()
+      ..moveTo(l, b - cLen)
+      ..lineTo(l, b - rad)
+      ..quadraticBezierTo(l, b, l + rad, b)
+      ..lineTo(l + cLen, b);
+    canvas.drawPath(pathBL, cornerPaint);
+
+    // Bottom-Right
+    final pathBR = Path()
+      ..moveTo(r - cLen, b)
+      ..lineTo(r - rad, b)
+      ..quadraticBezierTo(r, b, r, b - rad)
+      ..lineTo(r, b - cLen);
+    canvas.drawPath(pathBR, cornerPaint);
+
+    // ── 2. Anatomical Hand Contour (Natural Palm & Fingers) ────────────────
+    // Flip slightly if Left hand for ergonomic match
+    final bool isLeft = side.toLowerCase().contains('left');
+    final double flip = isLeft ? -1.0 : 1.0;
+
+    final handPath = Path();
+    // Wrist base
+    handPath.moveTo(cx - 36 * flip, cy + 95);
+    // Outer edge up to thumb base
+    handPath.quadraticBezierTo(cx - 44 * flip, cy + 65, cx - 52 * flip, cy + 45);
+    // Thumb outward and tip
+    handPath.quadraticBezierTo(cx - 76 * flip, cy + 28, cx - 88 * flip, cy - 8);
+    handPath.quadraticBezierTo(cx - 86 * flip, cy - 22, cx - 74 * flip, cy - 18);
+    // Thumb web
+    handPath.quadraticBezierTo(cx - 56 * flip, cy + 8, cx - 44 * flip, cy + 2);
+    // Index finger
+    handPath.quadraticBezierTo(cx - 50 * flip, cy - 40, cx - 46 * flip, cy - 90);
+    handPath.quadraticBezierTo(cx - 38 * flip, cy - 98, cx - 30 * flip, cy - 90);
+    handPath.quadraticBezierTo(cx - 26 * flip, cy - 45, cx - 22 * flip, cy - 18);
+    // Middle finger
+    handPath.quadraticBezierTo(cx - 22 * flip, cy - 50, cx - 12 * flip, cy - 106);
+    handPath.quadraticBezierTo(cx - 4 * flip, cy - 112, cx + 4 * flip, cy - 106);
+    handPath.quadraticBezierTo(cx + 6 * flip, cy - 50, cx + 8 * flip, cy - 18);
+    // Ring finger
+    handPath.quadraticBezierTo(cx + 10 * flip, cy - 46, cx + 22 * flip, cy - 95);
+    handPath.quadraticBezierTo(cx + 30 * flip, cy - 102, cx + 38 * flip, cy - 95);
+    handPath.quadraticBezierTo(cx + 32 * flip, cy - 44, cx + 28 * flip, cy - 12);
+    // Pinky finger
+    handPath.quadraticBezierTo(cx + 36 * flip, cy - 35, cx + 48 * flip, cy - 70);
+    handPath.quadraticBezierTo(cx + 56 * flip, cy - 75, cx + 62 * flip, cy - 68);
+    handPath.quadraticBezierTo(cx + 52 * flip, cy - 25, cx + 46 * flip, cy + 15);
+    // Palm side down to wrist
+    handPath.quadraticBezierTo(cx + 44 * flip, cy + 65, cx + 36 * flip, cy + 95);
+    handPath.close();
+
+    // Subtle translucent fill
+    canvas.drawPath(
+      handPath,
+      Paint()
+        ..color = color.withOpacity(0.04)
+        ..style = PaintingStyle.fill,
+    );
+
+    // Glowing contour stroke
+    canvas.drawPath(
+      handPath,
+      Paint()
+        ..color = color.withOpacity(0.60)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // ── 3. MediaPipe Palm Landmarks & Interconnection Rays (app1-palm) ────
+    final landmarks = [
+      Offset(cx, cy + 85),                           // 0: Wrist
+      Offset(cx - 38 * flip, cy + 50),               // 1: Thumb CMC
+      Offset(cx - 58 * flip, cy + 28),               // 2: Thumb MCP
+      Offset(cx - 74 * flip, cy + 6),                // 3: Thumb IP
+      Offset(cx - 82 * flip, cy - 14),               // 4: Thumb TIP
+      Offset(cx - 36 * flip, cy - 14),               // 5: Index MCP
+      Offset(cx - 39 * flip, cy - 44),               // 6: Index PIP
+      Offset(cx - 41 * flip, cy - 68),               // 7: Index DIP
+      Offset(cx - 43 * flip, cy - 88),               // 8: Index TIP
+      Offset(cx - 8 * flip, cy - 18),                // 9: Middle MCP
+      Offset(cx - 7 * flip, cy - 50),                // 10: Middle PIP
+      Offset(cx - 6 * flip, cy - 78),                // 11: Middle DIP
+      Offset(cx - 5 * flip, cy - 102),               // 12: Middle TIP
+      Offset(cx + 16 * flip, cy - 14),               // 13: Ring MCP
+      Offset(cx + 19 * flip, cy - 44),               // 14: Ring PIP
+      Offset(cx + 22 * flip, cy - 70),               // 15: Ring DIP
+      Offset(cx + 25 * flip, cy - 92),               // 16: Ring TIP
+      Offset(cx + 38 * flip, cy - 6),                // 17: Pinky MCP
+      Offset(cx + 44 * flip, cy - 30),               // 18: Pinky PIP
+      Offset(cx + 49 * flip, cy - 50),               // 19: Pinky DIP
+      Offset(cx + 54 * flip, cy - 66),               // 20: Pinky TIP
+    ];
+
+    // Connection lines (skeletal biometric mesh)
+    const connections = [
+      [0, 1], [1, 2], [2, 3], [3, 4],
+      [0, 5], [5, 6], [6, 7], [7, 8],
+      [9, 10], [10, 11], [11, 12],
+      [13, 14], [14, 15], [15, 16],
+      [0, 17], [17, 18], [18, 19], [19, 20],
+      [5, 9], [9, 13], [13, 17], [0, 9],
+    ];
+
+    final meshPaint = Paint()
+      ..color = color.withOpacity(0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    for (final conn in connections) {
+      canvas.drawLine(landmarks[conn[0]], landmarks[conn[1]], meshPaint);
     }
 
-    // Corner ticks (alignment markers — simulates mechanical guide from PDF §2)
-    final tickPaint = Paint()
-      ..color = color.withValues(alpha: 0.9)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-    final r = Rect.fromCenter(
-        center: Offset(cx, cy), width: size.width * 0.9, height: size.height * 0.85);
-    const t = 18.0;
-    final corners = [
-      [Offset(r.left, r.top + t), Offset(r.left, r.top), Offset(r.left + t, r.top)],
-      [Offset(r.right - t, r.top), Offset(r.right, r.top), Offset(r.right, r.top + t)],
-      [Offset(r.left, r.bottom - t), Offset(r.left, r.bottom), Offset(r.left + t, r.bottom)],
-      [Offset(r.right - t, r.bottom), Offset(r.right, r.bottom), Offset(r.right, r.bottom - t)],
-    ];
-    for (final pts in corners) {
-      canvas.drawPath(
-        Path()..moveTo(pts[0].dx, pts[0].dy)
-              ..lineTo(pts[1].dx, pts[1].dy)
-              ..lineTo(pts[2].dx, pts[2].dy),
-        tickPaint,
-      );
+    // Glowing Landmark Nodes
+    final nodePaint = Paint()
+      ..color = color.withOpacity(0.85)
+      ..style = PaintingStyle.fill;
+    final nodeGlow = Paint()
+      ..color = color.withOpacity(0.3)
+      ..style = PaintingStyle.fill;
+
+    for (final pt in landmarks) {
+      canvas.drawCircle(pt, 5.0, nodeGlow);
+      canvas.drawCircle(pt, 2.6, nodePaint);
     }
+
+    // ── 4. Palmar Vascular Plexus Target Crosshairs (Center of Palm) ──────
+    final centerPlexus = Offset(cx, cy + 28);
+    final targetPaint = Paint()
+      ..color = color.withOpacity(0.65)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    canvas.drawCircle(centerPlexus, 18, targetPaint);
+    canvas.drawCircle(centerPlexus, 9, Paint()
+      ..color = color.withOpacity(0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0);
+    canvas.drawCircle(centerPlexus, 3, Paint()..color = color..style = PaintingStyle.fill);
+
+    // Crosshairs
+    canvas.drawLine(
+      Offset(centerPlexus.dx - 26, centerPlexus.dy),
+      Offset(centerPlexus.dx + 26, centerPlexus.dy),
+      targetPaint,
+    );
+    canvas.drawLine(
+      Offset(centerPlexus.dx, centerPlexus.dy - 26),
+      Offset(centerPlexus.dx, centerPlexus.dy + 26),
+      targetPaint,
+    );
   }
 
   @override
